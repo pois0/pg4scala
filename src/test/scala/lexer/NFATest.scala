@@ -17,7 +17,8 @@ class NFATest extends AnyFunSuite {
   }
 
   test("EnumeratedAlternation") {
-    nfaCheck("red" | "black" | "white")("red", "black", "white")("yellow", "re", "black_black")
+    nfaCheck("red" | "black" | "white")("red", "black", "white")("yellow", "re", "blackblack")
+    nfaCheck("red".opt())("", "red")("yellow", "re", "redred")
   }
 
   test("RangeAlternation") {
@@ -26,6 +27,7 @@ class NFATest extends AnyFunSuite {
 
   test("Repetition") {
     nfaCheck("hello".rep0())("", "hello", "hellohello", "hellohellohellohello")("he", "hellohe", "ho")
+    nfaCheck("hello".rep1())("hello", "hellohello", "hellohellohellohello")("", "he", "hellohe", "ho")
   }
 
   test("Epsilon") {
@@ -35,11 +37,11 @@ class NFATest extends AnyFunSuite {
   private def nfaCheck(regex: Regex)(shouldBeAccepted: String*)(shouldBeRejected: String*): Unit = {
     val nfa = fromRegex(regex)
     for (str <- shouldBeAccepted) {
-      assert(transit(nfa, str).contains(1), s"""Checking whether "$str" will be accepted by $regex""")
+      assert(transit(nfa, str).contains(1), s"""Checking whether "$str" is accepted by $regex""")
     }
 
     for (str <- shouldBeRejected) {
-      assert(!transit(nfa, str).contains(1), s"""Checking whether "$str" will be rejected by $regex""")
+      assert(!transit(nfa, str).contains(1), s"""Checking whether "$str" is rejected by $regex""")
     }
   }
 }
