@@ -1,88 +1,78 @@
 package jp.pois.pg4scala
 package lexer
 
+import lexer.NFA.Transit
 import lexer.Regex.Alternation.{EnumeratedAlternation, RangeAlternation}
 import lexer.Utils.ASCII_SIZE
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-private[lexer] class NFA(val table: mutable.Buffer[Map[Int, Seq[Int]]])
+private[lexer] class NFA(val table: mutable.Buffer[Transit])
 
 private[lexer] object NFA {
+  private type Transit = Map[Int, Seq[Int]]
+
   val epsilon: Int = ASCII_SIZE
+  val initialState = 1
+  val finishState = 0
 
   def fromRegex(regex: Regex): NFA = {
-    val innerTable = fromRegex(regex, 2, 1).table
-    val buf = ArrayBuffer[Map[Int, Seq[Int]]](
-      Map(epsilon -> Seq(2)),
-      Map.empty
-    )
-    buf ++= innerTable
+    val buf = ArrayBuffer[Transit](Map.empty)
+
+    def loop(regex: Regex, stateOffset: Int, finishState: Int): Int = regex match {
+      case Regex.Symbol(c) => {
+        buf += Map(c -> Seq(finishState))
+        1
+      }
+      case RangeAlternation(from, to) => {
+        buf += from.to(to).map(_ -> Seq(finishState)).toMap
+        1
+      }
+      case EnumeratedAlternation(es) => {
+        val initialIndex = buf.size
+        buf += Map.empty
+        val initialTrans = ArrayBuffer[Int]()
+        var offSet = stateOffset + 1
+
+        for (e <- es) {
+          initialTrans += offSet
+          offSet += loop(e, offSet, finishState)
+        }
+
+        buf(initialIndex) = Map(epsilon -> initialTrans)
+        offSet - initialIndex
+      }
+      case Regex.Concatenation(es) => {
+        val initialIndex = buf.size
+        buf += Map.empty
+        var offset = stateOffset + 1
+        var finish = finishState
+
+        for (e <- es.reverse) {
+          val size = loop(e, offset, finish)
+          finish = offset
+          offset += size
+        }
+
+        buf(initialIndex) = Map(epsilon -> Seq(finish))
+        offset - initialIndex
+      }
+      case Regex.Repetition(e) => {
+        buf += Map(epsilon -> Seq(finishState, stateOffset + 1))
+        loop(e, stateOffset + 1, stateOffset) + 1
+      }
+      case Regex.Epsilon => {
+        buf += Map(epsilon -> Seq(finishState))
+        1
+      }
+      case Regex.Wildcard => {
+        buf += (0 until ASCII_SIZE).map(_ -> Seq(finishState)).toMap
+        1
+      }
+    }
+
+    loop(regex, 1, 0)
     new NFA(buf)
-  }
-
-  def fromRegex(regex: Regex, stateOffset: Int, finishState: Int): NFA = regex match {
-    case Regex.Symbol(c) =>
-      new NFA(
-        mutable.Buffer(
-          Map(c -> Seq(finishState)),
-        )
-      )
-    case RangeAlternation(from, to) =>
-      new NFA(
-        mutable.Buffer(
-          from.to(to).map(_ -> Seq(finishState)).toMap,
-        )
-      )
-    case EnumeratedAlternation(es) => {
-      val initialTrans = ArrayBuffer[Int]()
-      val buf = mutable.UnrolledBuffer[Map[Int, Seq[Int]]]()
-      var offSet = stateOffset + 1
-
-      for (e <- es) {
-        initialTrans += offSet
-        val table = fromRegex(e, offSet, finishState).table
-        offSet += table.size
-        buf ++= table
-      }
-
-      buf.insert(0, Map(epsilon -> initialTrans))
-      new NFA(buf)
-    }
-    case Regex.Concatenation(es) => {
-      val buf = mutable.UnrolledBuffer[Map[Int, Seq[Int]]]()
-      var offset = stateOffset + 1
-      var finish = finishState
-
-      for (e <- es.reverse) {
-        val table = fromRegex(e, offset, finish).table
-        finish = offset
-        offset += table.size
-        buf ++= table
-      }
-
-      buf.insert(0, Map(epsilon -> Seq(finish)))
-
-      new NFA(buf)
-    }
-    case Regex.Repetition(e) =>
-      new NFA(
-        mutable.UnrolledBuffer[Map[Int, Seq[Int]]](
-          Map(epsilon -> Seq(finishState, stateOffset + 1))
-        ) ++= fromRegex(e, stateOffset + 1, stateOffset).table
-      )
-    case Regex.Epsilon =>
-      new NFA(
-        mutable.Buffer(
-          Map(epsilon -> Seq(finishState))
-        )
-      )
-    case Regex.Wildcard =>
-      new NFA(
-        mutable.Buffer(
-          (0 until ASCII_SIZE).map(_ -> Seq(finishState)).toMap
-        )
-      )
   }
 }
