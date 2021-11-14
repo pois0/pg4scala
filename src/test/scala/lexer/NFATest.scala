@@ -1,7 +1,7 @@
 package jp.pois.pg4scala
 package lexer
 
-import lexer.NFA.{epsilon, finishState, initialState}
+import lexer.NFA.initialState
 import lexer.NFATest.transit
 import lexer.Regex.{range, stringToRegexFuncs}
 
@@ -37,23 +37,20 @@ class NFATest extends AnyFunSuite {
   private def nfaCheck(regex: Regex)(shouldBeAccepted: String*)(shouldBeRejected: String*): Unit = {
     val nfa = NFA.fromRegex(regex)
     for (str <- shouldBeAccepted) {
-      assert(transit(nfa, str).contains(finishState), s"""Checking whether "$str" is accepted by $regex""")
+      val transitRes = transit(nfa, str)
+      assert((transitRes & nfa.acceptStates).nonEmpty, s"""Checking whether "$str" is accepted by $regex / transitRes: $transitRes / acceptState: ${nfa.acceptStates}""")
     }
 
     for (str <- shouldBeRejected) {
-      assert(!transit(nfa, str).contains(finishState), s"""Checking whether "$str" is rejected by $regex""")
+      val transitRes = transit(nfa, str)
+      assert((transitRes & nfa.acceptStates).isEmpty, s"""Checking whether "$str" is rejected by $regex / transitRes: $transitRes / acceptState: ${nfa.acceptStates}""")
     }
   }
 }
 
 object NFATest {
   private def transit(nfa: NFA, string: String): Set[Int] =
-    string.foldLeft(epsilonTransit(nfa)(initialState)) { (states, c) =>
-      states.flatMap(epsilonTransit(nfa)).flatMap { s => nfa.table(s).getOrElse(c.toInt, Set.empty) }
-    }.flatMap(epsilonTransit(nfa))
-
-  private def epsilonTransit(nfa: NFA)(state: Int): Set[Int] =
-    Set(state) ++ nfa.table(state).get(epsilon).fold(Set.empty[Int]) {
-      _.foldLeft(Set.empty[Int]) { (states, s) => states ++ epsilonTransit(nfa)(s) }
+    string.foldLeft(Set(initialState)) { (states, c) =>
+      states.flatMap { s => nfa.table(s).getOrElse(c.toInt, Set.empty) }
     }
 }

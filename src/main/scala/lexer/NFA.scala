@@ -5,10 +5,11 @@ import lexer.NFA.Transit
 import lexer.Regex.Alternation.{EnumeratedAlternation, RangeAlternation}
 import lexer.Utils.ASCII_SIZE
 
+import java.util
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-private[lexer] class NFA(val table: mutable.Buffer[Transit])
+private[lexer] class NFA(val table: mutable.Buffer[Transit], val acceptStates: Set[Int])
 
 private[lexer] object NFA {
   private type Transit = Map[Int, Seq[Int]]
@@ -73,6 +74,43 @@ private[lexer] object NFA {
     }
 
     loop(regex, 1, 0)
-    new NFA(buf)
+    eliminateEpsilon(new NFA(buf, Set(finishState)))
+  }
+
+  def eliminateEpsilon(nfa: NFA): NFA = {
+    val table = nfa.table
+    val size = table.size
+    val visited = new util.BitSet(size)
+    var firstClearBit = 0
+    val accepted = mutable.Set(finishState)
+
+    def loop(index: Int): Transit = {
+      val transit = table(index)
+
+      if (visited.get(index)) return transit
+      visited.set(index)
+
+      transit.get(epsilon).map { epsilonSeq =>
+        val tmp = mutable.Map() ++ transit
+        tmp.remove(epsilon)
+        for (s <- epsilonSeq) {
+          for ((c, seq) <- loop(s) if c != epsilon) {
+            tmp(c) = tmp.get(c).map {
+              _ ++ seq
+            }.getOrElse(seq)
+          }
+          if (accepted.contains(s)) accepted += index
+        }
+        val res = tmp.toMap
+        table(index) = res
+        res
+      }.getOrElse(transit)
+    }
+
+    while ({ firstClearBit = visited.nextClearBit(firstClearBit); firstClearBit < size }) {
+      loop(firstClearBit)
+    }
+
+    new NFA(table, accepted.toSet)
   }
 }
