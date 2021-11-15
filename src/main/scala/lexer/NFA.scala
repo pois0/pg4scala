@@ -1,6 +1,7 @@
 package jp.pois.pg4scala
 package lexer
 
+import lexer.Lexer.TokenGenerator
 import lexer.NFA.Transit
 import lexer.Regex.Alternation.{EnumeratedAlternation, RangeAlternation}
 import lexer.Utils.ASCII_SIZE
@@ -9,31 +10,32 @@ import java.util
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-private[lexer] class NFA(val table: mutable.Buffer[Transit], val acceptStates: Set[Int])
+private[lexer] case class NFA(table: mutable.Buffer[Transit], initialState: Int, resultMap: Map[Int, TokenGenerator], resultOrder: Map[TokenGenerator, Int])
 
 private[lexer] object NFA {
-  private type Transit = Map[Int, Seq[Int]]
+  type Transit = Map[Int, Seq[Int]]
 
-  val epsilon: Int = ASCII_SIZE
-  val initialState = 1
-  val finishState = 0
+  val epsilon: Int = -1
 
-  def fromRegex(regex: Regex): NFA = {
-    val buf = ArrayBuffer[Transit](Map.empty)
+  def fromRegexes(regexes: (Regex, TokenGenerator)*): NFA = {
+    val regSize = regexes.size
+    val buf = new ArrayBuffer[Map[Int, Seq[Int]]](regSize * 2 + 1)
+    for (i <- regexes.indices) buf += Map.empty
+    val arr = regexes.zipWithIndex.map { case ((_, gen), i) => i -> gen }.toMap
 
     def loop(regex: Regex, stateOffset: Int, finishState: Int): Int = regex match {
       case Regex.Symbol(c) => {
         buf += Map(c -> Seq(finishState))
         1
       }
-      case RangeAlternation(from, to) => {
-        buf += from.to(to).map(_ -> Seq(finishState)).toMap
+      case RangeAlternation(range) => {
+        buf += range.map { _.toInt -> Seq(finishState) }.toMap
         1
       }
       case EnumeratedAlternation(es) => {
         val initialIndex = buf.size
-        buf += Map.empty
         val initialTrans = ArrayBuffer[Int]()
+        buf += Map(epsilon -> initialTrans)
         var offSet = stateOffset + 1
 
         for (e <- es) {
@@ -41,12 +43,12 @@ private[lexer] object NFA {
           offSet += loop(e, offSet, finishState)
         }
 
-        buf(initialIndex) = Map(epsilon -> initialTrans)
         offSet - initialIndex
       }
       case Regex.Concatenation(es) => {
         val initialIndex = buf.size
-        buf += Map.empty
+        val initSeq = mutable.Seq(0)
+        buf += Map(epsilon -> initSeq)
         var offset = stateOffset + 1
         var finish = finishState
 
@@ -56,7 +58,7 @@ private[lexer] object NFA {
           offset += size
         }
 
-        buf(initialIndex) = Map(epsilon -> Seq(finish))
+        initSeq(0) = finish
         offset - initialIndex
       }
       case Regex.Repetition(e) => {
@@ -73,8 +75,16 @@ private[lexer] object NFA {
       }
     }
 
-    loop(regex, 1, 0)
-    eliminateEpsilon(new NFA(buf, Set(finishState)))
+    var offset = regSize + 1
+    val seq = ArrayBuffer[Int]()
+    buf += Map(epsilon -> seq)
+
+    for (((regex, _), i) <- regexes.zipWithIndex) {
+      seq += offset
+      offset += loop(regex, offset, i)
+    }
+
+    eliminateEpsilon(new NFA(buf, regSize, arr, regexes.zipWithIndex.reverse.map { case ((_, gen), i) => gen -> i }.toMap))
   }
 
   def eliminateEpsilon(nfa: NFA): NFA = {
@@ -82,7 +92,7 @@ private[lexer] object NFA {
     val size = table.size
     val visited = new util.BitSet(size)
     var firstClearBit = 0
-    val accepted = mutable.Set(finishState)
+    val resultMap = mutable.Map.empty ++ nfa.resultMap
 
     def loop(index: Int): Transit = {
       val transit = table(index)
@@ -92,6 +102,8 @@ private[lexer] object NFA {
 
       transit.get(epsilon).map { epsilonSeq =>
         val tmp = mutable.Map() ++ transit
+        var tmpTransition: Option[TokenGenerator] = None
+        var tmpRank =  Int.MaxValue
         tmp.remove(epsilon)
         for (s <- epsilonSeq) {
           for ((c, seq) <- loop(s) if c != epsilon) {
@@ -99,10 +111,17 @@ private[lexer] object NFA {
               _ ++ seq
             }.getOrElse(seq)
           }
-          if (accepted.contains(s)) accepted += index
+          resultMap.get(s).foreach { transit =>
+            val rank = nfa.resultOrder(transit)
+            if (rank < tmpRank) {
+              tmpRank = rank
+              tmpTransition = Some(transit)
+            }
+          }
         }
         val res = tmp.toMap
         table(index) = res
+        tmpTransition.foreach { resultMap(index) = _ }
         res
       }.getOrElse(transit)
     }
@@ -111,6 +130,6 @@ private[lexer] object NFA {
       loop(firstClearBit)
     }
 
-    new NFA(table, accepted.toSet)
+    new NFA(table, nfa.initialState, resultMap.toMap, nfa.resultOrder)
   }
 }

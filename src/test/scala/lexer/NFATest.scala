@@ -1,9 +1,9 @@
 package jp.pois.pg4scala
 package lexer
 
-import lexer.NFA.initialState
-import lexer.NFATest.transit
-import lexer.Regex.{range, stringToRegexFuncs}
+import common.Token
+import lexer.NFATest.{TestToken, transit}
+import lexer.Regex.stringToRegexFuncs
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -18,16 +18,16 @@ class NFATest extends AnyFunSuite {
 
   test("EnumeratedAlternation") {
     nfaCheck("red" | "black" | "white")("red", "black", "white")("yellow", "re", "blackblack")
-    nfaCheck("red".opt())("", "red")("yellow", "re", "redred")
+    nfaCheck("red".opt)("", "red")("yellow", "re", "redred")
   }
 
   test("RangeAlternation") {
-    nfaCheck(range('a', 'd'))("a", "b", "c", "d")("e", "f", "", "abc")
+    nfaCheck('a' to 'd')("a", "b", "c", "d")("e", "f", "", "abc")
   }
 
   test("Repetition") {
-    nfaCheck("hello".rep0())("", "hello", "hellohello", "hellohellohellohello")("he", "hellohe", "ho")
-    nfaCheck("hello".rep1())("hello", "hellohello", "hellohellohellohello")("", "he", "hellohe", "ho")
+    nfaCheck("hello".rep0)("", "hello", "hellohello", "hellohellohellohello")("he", "hellohe", "ho")
+    nfaCheck("hello".rep1)("hello", "hellohello", "hellohellohellohello")("", "he", "hellohe", "ho")
   }
 
   test("Epsilon") {
@@ -35,22 +35,30 @@ class NFATest extends AnyFunSuite {
   }
 
   private def nfaCheck(regex: Regex)(shouldBeAccepted: String*)(shouldBeRejected: String*): Unit = {
-    val nfa = NFA.fromRegex(regex)
+    val nfa = NFA.fromRegexes((regex, { _ => TestToken }))
     for (str <- shouldBeAccepted) {
       val transitRes = transit(nfa, str)
-      assert((transitRes & nfa.acceptStates).nonEmpty, s"""Checking whether "$str" is accepted by $regex / transitRes: $transitRes / acceptState: ${nfa.acceptStates}""")
+      assert(
+        transitRes.exists(nfa.resultMap.contains),
+        s"""Checking whether "$str" is accepted by $regex / transitRes: $transitRes / nfa: ${nfa}"""
+      )
     }
 
     for (str <- shouldBeRejected) {
       val transitRes = transit(nfa, str)
-      assert((transitRes & nfa.acceptStates).isEmpty, s"""Checking whether "$str" is rejected by $regex / transitRes: $transitRes / acceptState: ${nfa.acceptStates}""")
+      assert(
+        !transitRes.exists(nfa.resultMap.contains),
+        s"""Checking whether "$str" is accepted by $regex / transitRes: $transitRes / nfa: ${nfa}"""
+      )
     }
   }
 }
 
 object NFATest {
+  private object TestToken extends Token
+
   private def transit(nfa: NFA, string: String): Set[Int] =
-    string.foldLeft(Set(initialState)) { (states, c) =>
+    string.foldLeft(Set(nfa.initialState)) { (states, c) =>
       states.flatMap { s => nfa.table(s).getOrElse(c.toInt, Set.empty) }
     }
 }
