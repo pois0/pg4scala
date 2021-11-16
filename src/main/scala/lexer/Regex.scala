@@ -18,7 +18,7 @@ object Regex {
   final object Wildcard extends Regex
 
   object Alternation {
-    final case class RangeAlternation private[Regex](range: NumericRange[Char]) extends Alternation
+    final case class RangeAlternation private[Regex](range: Range) extends Alternation
     final case class EnumeratedAlternation private[Regex](es: Array[Regex]) extends Alternation
   }
 
@@ -32,7 +32,7 @@ object Regex {
 
   implicit def charToRegex(char: Char): Regex = Symbol(char.toInt)
   implicit def stringToRegex(string: String): Regex = Concatenation(string.map(charToRegex).toArray)
-  implicit def charRangeToRegex(range: NumericRange[Char]): Regex = RangeAlternation(range)
+  implicit def charRangeToRegex(range: NumericRange[Char]): Regex = RangeAlternation(if (range.isInclusive) range.start.toInt to range.end.toInt else range.start.toInt until range.end.toInt)
   def epsilon(): Regex = Epsilon
   def wildcard(): Regex = Wildcard
 
@@ -46,4 +46,5 @@ object Regex {
 
   implicit def charToRegexFuncs(char: Char): RegexFuncs = RegexFuncs(Symbol(char.toInt))
   implicit def stringToRegexFuncs(string: String): RegexFuncs = RegexFuncs(Concatenation(string.map(charToRegex).toArray))
+  implicit def charRangeToRegexFuncs(range: NumericRange[Char]): RegexFuncs = RegexFuncs(charRangeToRegex(range))
 }

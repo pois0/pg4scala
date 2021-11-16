@@ -5,6 +5,7 @@ import lexer.Lexer.TokenGenerator
 import lexer.NFA.Transit
 import lexer.Regex.Alternation.{EnumeratedAlternation, RangeAlternation}
 import lexer.Utils.ASCII_SIZE
+import utils.NumericConstantMap
 
 import java.util
 import scala.collection.mutable
@@ -20,7 +21,7 @@ private[lexer] object NFA {
   def fromRegexes(regexes: (Regex, TokenGenerator)*): NFA = {
     val regSize = regexes.size
     val buf = new ArrayBuffer[Map[Int, Seq[Int]]](regSize * 2 + 1)
-    for (i <- regexes.indices) buf += Map.empty
+    for (_ <- regexes.indices) buf += Map.empty
     val arr = regexes.zipWithIndex.map { case ((_, gen), i) => i -> gen }.toMap
 
     def loop(regex: Regex, stateOffset: Int, finishState: Int): Int = regex match {
@@ -29,7 +30,7 @@ private[lexer] object NFA {
         1
       }
       case RangeAlternation(range) => {
-        buf += range.map { _.toInt -> Seq(finishState) }.toMap
+        buf += new NumericConstantMap[Seq[Int]](range, Seq(finishState))
         1
       }
       case EnumeratedAlternation(es) => {
@@ -70,6 +71,8 @@ private[lexer] object NFA {
         1
       }
       case Regex.Wildcard => {
+        buf += new NumericConstantMap(0 until ASCII_SIZE, Seq(finishState))
+        0 to ASCII_SIZE
         buf += (0 until ASCII_SIZE).map(_ -> Seq(finishState)).toMap
         1
       }
