@@ -1,8 +1,11 @@
 package jp.pois.pg4scala
 package lexer
 
-import common.{Skip, Token}
+import common.Token
+import common.Token.{EOF, Skip}
 import lexer.DFA.{State, TransitionResult}
+import lexer.Lexer.isBreakChar
+import lexer.MatchedContext.CharPosition
 import lexer.Regex.Alternation.EnumeratedAlternation
 import lexer.exceptions.MismatchedCharException
 
@@ -11,32 +14,81 @@ import scala.collection.mutable.ArrayBuffer
 
 class Lexer private[Lexer](private val dfa: DFA) {
   def lex(reader: Reader): Stream[Token] = {
-    def loop(state: State, c: Int, strBuf: StringBuilder): Stream[Token] = {
+    val strBuf = StringBuilder.newBuilder
+    var currentIndex = 0
+    var currentRow = 0
+    var currentColumn = 0
+    var broken = false
+    var startAt = CharPosition(currentRow, currentColumn, currentIndex)
+
+    def read = reader.read()
+
+    def pushAndRead(prev: Int) = {
+      strBuf.append(prev.toChar)
+      val c = read
+      currentIndex += 1
+      currentColumn += 1
+      handleLineBreak()
+      if (isBreakChar(c)) broken = true
+      c
+    }
+
+    def shift(): Unit = {
+      currentIndex += 1
+      currentColumn += 1
+    }
+
+    def handleLineBreak(): Unit = {
+      if (broken) {
+        currentRow += 1
+        currentColumn = -1
+        broken = false
+      }
+    }
+
+    def currentCharPosition = CharPosition(currentRow, currentColumn, currentIndex)
+
+    def reset: MatchedContext = {
+      val startAtTmp = startAt
+      val current = currentCharPosition
+      val matchedString = strBuf.result
+      startAt = if (broken) {
+        handleLineBreak()
+        currentCharPosition
+      } else current
+      strBuf.clear
+      MatchedContext(matchedString, startAtTmp, current)
+    }
+
+    def loop(state: State, c: Int): Stream[Token] = {
       if (c < 0) {
         dfa.currentResult(state) match {
-          case TransitionResult.Accepted(tokenGen) => tokenGen(strBuf.result) #:: Stream.empty
+          case TransitionResult.Accepted(tokenGen) => {
+            shift()
+            val token = tokenGen(reset)
+            if (token eq Skip) EOF #:: Stream.Empty else token #:: EOF #:: Stream.empty
+          }
           case TransitionResult.Rejected => throw new MismatchedCharException
           case TransitionResult.OnGoing(_) => throw new UnsupportedOperationException
         }
       } else {
         dfa.transit(state, c) match {
-          case TransitionResult.OnGoing(state) => loop(state, reader.read(), strBuf.append(c.toChar))
+          case TransitionResult.OnGoing(state) => loop(state, pushAndRead(c))
           case TransitionResult.Accepted(tokenGen) => {
-            val token = tokenGen(strBuf.result)
-            if (token eq Skip) loop(DFA.State.initialState, c, new StringBuilder)
-            else token #:: loop(DFA.State.initialState, c, new StringBuilder)
+            val token = tokenGen(reset)
+            if (token eq Skip) loop(DFA.State.initialState, c) else token #:: loop(DFA.State.initialState, c)
           }
           case TransitionResult.Rejected => throw new MismatchedCharException
         }
       }
     }
 
-    loop(DFA.State.initialState, reader.read(), new StringBuilder)
+    loop(DFA.State.initialState, read)
   }
 }
 
 object Lexer {
-  type TokenGenerator = String => Token
+  type TokenGenerator = MatchedContext => Token
 
   private val skipGenerator: TokenGenerator = { _ => Skip }
 
@@ -52,7 +104,7 @@ object Lexer {
       this
     }
 
-    def rule(regex: Regex, mapToToken: String => Token): LexerBuilder = {
+    def rule(regex: Regex, mapToToken: TokenGenerator): LexerBuilder = {
       rules += Tuple2(regex, mapToToken)
       this
     }
@@ -62,4 +114,6 @@ object Lexer {
       this
     }
   }
+
+  private def isBreakChar(c: Int) = c == 0xA
 }

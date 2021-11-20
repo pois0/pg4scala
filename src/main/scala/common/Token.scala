@@ -3,4 +3,7 @@ package common
 
 trait Token
 
-object Skip extends Token
+object Token {
+  object Skip extends Token
+  object EOF extends Token
+}
