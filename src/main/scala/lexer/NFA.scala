@@ -107,9 +107,9 @@ private[lexer] object NFA {
         tmp.remove(epsilon)
         for (s <- epsilonSeq) {
           for ((c, seq) <- loop(s) if c != epsilon) {
-            tmp(c) = tmp.get(c).map {
-              _ ++ seq
-            }.getOrElse(seq)
+            tmp(c) = tmp.get(c)
+              .map { _ ++ seq }
+              .getOrElse(seq)
           }
           resultMap.get(s).foreach { transit =>
             val rank = nfa.resultOrder(transit)

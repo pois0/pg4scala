@@ -29,27 +29,26 @@ object DFA {
     val resultMap = mutable.Map.empty[Int, TokenGenerator]
     while (queue.nonEmpty) {
       val (nfaState, dfaState) = queue.dequeue()
-      nfaState.flatMap { s => nfa.resultMap.get(s) }.reduceOption(minBy(nfa.resultOrder)).foreach {
-        resultMap(dfaState) = _
-      }
+      nfaState.flatMap { s => nfa.resultMap.get(s) }
+        .reduceOption(minBy(nfa.resultOrder))
+        .foreach { resultMap(dfaState) = _ }
 
       transitTable(dfaState) = {
         val map = mutable.Map.empty[Int, Set[Int]]
 
-        nfaState.foreach { state =>
-          for ((c, seq) <- nfa.table(state)) {
-            map(c) = map.getOrElse(c, Set.empty) ++ seq
-          }
+        for (state <- nfaState; (c, seq) <- nfa.table(state)) {
+          map(c) = map.getOrElse(c, Set.empty) ++ seq
         }
 
         map.map { case (c, stateSet) =>
-          val index = stateMap.getOrElseUpdate(stateSet, {
-            val tmp = newStateId
-            newStateId += 1
-            queue += Tuple2(stateSet, tmp)
-            tmp
-          })
-          c -> State(index)
+          c -> State(
+            stateMap.getOrElseUpdate(stateSet, {
+              val tmp = newStateId
+              newStateId += 1
+              queue += Tuple2(stateSet, tmp)
+              tmp
+            })
+          )
         }.toMap
       }
     }
