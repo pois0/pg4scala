@@ -33,8 +33,8 @@ object Regex {
   implicit def charToRegex(char: Char): Regex = Symbol(char.toInt)
   implicit def stringToRegex(string: String): Regex = Concatenation(string.map(charToRegex).toArray)
   implicit def charRangeToRegex(range: NumericRange[Char]): Regex = RangeAlternation(if (range.isInclusive) range.start.toInt to range.end.toInt else range.start.toInt until range.end.toInt)
-  def epsilon(): Regex = Epsilon
-  def wildcard(): Regex = Wildcard
+  def epsilon: Regex = Epsilon
+  def wildcard: Regex = Wildcard
 
   implicit class RegexFuncs(val self: Regex) {
     def |(that: Regex): Regex = EnumeratedAlternation(Array(self, that))

@@ -16,6 +16,7 @@ class NFATest extends AnyFunSuite {
     nfaCheck("hello")("hello")("", "bye", "hello!!")
   }
 
+  //noinspection SpellCheckingInspection
   test("EnumeratedAlternation") {
     nfaCheck("red" | "black" | "white")("red", "black", "white")("yellow", "re", "blackblack")
     nfaCheck("red".opt)("", "red")("yellow", "re", "redred")
@@ -25,13 +26,14 @@ class NFATest extends AnyFunSuite {
     nfaCheck('a' to 'd')("a", "b", "c", "d")("e", "f", "", "abc")
   }
 
+  //noinspection SpellCheckingInspection
   test("Repetition") {
     nfaCheck("hello".rep0)("", "hello", "hellohello", "hellohellohellohello")("he", "hellohe", "ho")
     nfaCheck("hello".rep1)("hello", "hellohello", "hellohellohellohello")("", "he", "hellohe", "ho")
   }
 
   test("Epsilon") {
-    nfaCheck(Regex.epsilon())("")("a", "100")
+    nfaCheck(Regex.epsilon)("")("a", "100")
   }
 
   private def nfaCheck(regex: Regex)(shouldBeAccepted: String*)(shouldBeRejected: String*): Unit = {
@@ -40,7 +42,7 @@ class NFATest extends AnyFunSuite {
       val transitRes = transit(nfa, str)
       assert(
         transitRes.exists(nfa.resultMap.contains),
-        s"""Checking whether "$str" is accepted by $regex / transitRes: $transitRes / nfa: ${nfa}"""
+        s"""Checking whether "$str" is accepted by $regex / transitRes: $transitRes / nfa: $nfa"""
       )
     }
 
@@ -48,7 +50,7 @@ class NFATest extends AnyFunSuite {
       val transitRes = transit(nfa, str)
       assert(
         !transitRes.exists(nfa.resultMap.contains),
-        s"""Checking whether "$str" is accepted by $regex / transitRes: $transitRes / nfa: ${nfa}"""
+        s"""Checking whether "$str" is accepted by $regex / transitRes: $transitRes / nfa: $nfa"""
       )
     }
   }

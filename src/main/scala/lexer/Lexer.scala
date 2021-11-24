@@ -21,11 +21,11 @@ class Lexer private[Lexer](private val dfa: DFA) {
     var broken = false
     var startAt = CharPosition(currentRow, currentColumn, currentIndex)
 
-    def read = reader.read()
+    def read() = reader.read()
 
     def pushAndRead(prev: Int) = {
       strBuf.append(prev.toChar)
-      val c = read
+      val c = read()
       currentIndex += 1
       currentColumn += 1
       handleLineBreak()
@@ -48,7 +48,7 @@ class Lexer private[Lexer](private val dfa: DFA) {
 
     def currentCharPosition = CharPosition(currentRow, currentColumn, currentIndex)
 
-    def reset: MatchedContext = {
+    def reset(): MatchedContext = {
       val startAtTmp = startAt
       val current = currentCharPosition
       val matchedString = strBuf.result
@@ -65,8 +65,7 @@ class Lexer private[Lexer](private val dfa: DFA) {
         dfa.currentResult(state) match {
           case TransitionResult.Accepted(tokenGen) => {
             shift()
-            val token = tokenGen(reset)
-            if (token eq Skip) EOF #:: Stream.Empty else token #:: EOF #:: Stream.empty
+            tokenGen(reset()) #:: EOF #:: Stream.empty
           }
           case TransitionResult.Rejected => throw new MismatchedCharException
           case TransitionResult.OnGoing(_) => throw new UnsupportedOperationException
@@ -74,16 +73,13 @@ class Lexer private[Lexer](private val dfa: DFA) {
       } else {
         dfa.transit(state, c) match {
           case TransitionResult.OnGoing(state) => loop(state, pushAndRead(c))
-          case TransitionResult.Accepted(tokenGen) => {
-            val token = tokenGen(reset)
-            if (token eq Skip) loop(DFA.State.initialState, c) else token #:: loop(DFA.State.initialState, c)
-          }
+          case TransitionResult.Accepted(tokenGen) => tokenGen(reset()) #:: loop(DFA.State.initialState, c)
           case TransitionResult.Rejected => throw new MismatchedCharException
         }
       }
     }
 
-    loop(DFA.State.initialState, read)
+    loop(DFA.State.initialState, read()).filterNot { _ eq Skip }
   }
 }
 
@@ -92,7 +88,7 @@ object Lexer {
 
   private val skipGenerator: TokenGenerator = { _ => Skip }
 
-  def builder() = new LexerBuilder
+  def builder = new LexerBuilder
 
   class LexerBuilder private[Lexer]() {
     private val rules = new ArrayBuffer[(Regex, TokenGenerator)]

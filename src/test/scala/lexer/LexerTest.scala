@@ -14,7 +14,7 @@ import java.io.StringReader
 
 class LexerTest extends AnyFunSuite {
   test("Simple Test") {
-    val rule = Lexer.builder()
+    val rule = Lexer.builder
       .ignore(' ', '\n', '\t')
       .rule("function", FunctionToken)
       .build
@@ -23,7 +23,7 @@ class LexerTest extends AnyFunSuite {
   }
 
   test("Use TokenGenerator") {
-    val rule = Lexer.builder()
+    val rule = Lexer.builder
       .ignore(' ', '\n', '\t')
       .rule("function", FunctionToken)
       .rule("if", IfToken)
@@ -35,7 +35,7 @@ class LexerTest extends AnyFunSuite {
   }
 
   test("Test CharPosition") {
-    val rule = Lexer.builder()
+    val rule = Lexer.builder
       .ignore(' ', '\n', '\t')
       .rule("function", { c => FunctionTokenWithPos(c.start, c.end) })
       .rule(Alphabet * Word.rep0, { c => IdentifierWithPos(c.matchedString, c.start, c.end) })
@@ -56,7 +56,7 @@ ident2 function
   }
 
   test("Test CharPosition when regexp of rule includes a line break") {
-    val rule = Lexer.builder()
+    val rule = Lexer.builder
       .ignore(' ', '\n', '\t')
       .rule((Word | '\n').rep1, { c => IdentifierWithPos(c.matchedString, c.start, c.end) })
       .build
@@ -72,7 +72,7 @@ ifier
   }
 
   test("Test longest match") {
-    val rule = Lexer.builder()
+    val rule = Lexer.builder
       .rule("if", IfToken)
       .rule(Alphabet * Word.rep0, { c => Identifier(c.matchedString) })
       .rule(CharacterClass.Digit.rep1, { c => Digit(c.matchedString.toLong) })
