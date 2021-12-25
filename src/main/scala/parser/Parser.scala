@@ -3,14 +3,13 @@ package parser
 
 import parser.Parser.AnalyseResult.{Reduce, Shift}
 import parser.Parser.ParserBuilder.{ParserBuilderConstraints, Set, Unset}
+import parser.Parser.ParserStackElement.Bottom
 import parser.Parser.ParserStackTerm.{ParsedValue, Token}
 import parser.Parser.{AnalyseResult, ParseResult, ParserStackElement, ParserStackTerm}
 import parser.Term.NonTerminalSymbol
 import utils.{ConstantMap, RawArrayBuffer}
 
-import jp.pois.pg4scala.parser.Parser.ParseResult.Value
-import jp.pois.pg4scala.parser.Parser.ParserStackElement.Bottom
-
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -19,12 +18,21 @@ class Parser[Value] private(
   private val nonTermMap: Array[Map[NonTerminalSymbol, Int]]
 ) {
   def parse(tokens: Stream[common.Token]): Value = {
+    val stepper = new Stepper
+    tokens.flatMap(stepper.step).headOption match {
+      case Some(value) => value
+      case None => ??? // Error handling
+    }
+  }
+
+  private final class Stepper {
     val stack = new mutable.ArrayStack[ParserStackElement[Value]]
     stack += Bottom
     var currentState = 0
 
-    def step(token: common.Token): Option[Value] = termMap(currentState).get(token.getClass).flatMap {
-      _ match {
+    @tailrec
+    def step(token: common.Token): Option[Value] = termMap(currentState).get(token.getClass) match {
+      case Some(res) => res match {
         case AnalyseResult.Accept => stack.pop().term match {
           case ParsedValue(_, value) => Some(value)
           case Token(_) => ??? // throw Error
@@ -41,16 +49,13 @@ class Parser[Value] private(
           for (i <- arr.indices.reverse) {
             arr(i) = stack.pop().term.toResult
           }
-          currentState = nonTermMap(stack.top.state)(symbol)
-          stack.push(ParserStackElement.Element(ParsedValue(symbol, generator(arr.toSeq).asInstanceOf[Value]), currentState))
-          step(token) // TODO Remove cast
+          val goto = nonTermMap(stack.top.state)(symbol)
+          currentState = goto
+          stack.push(ParserStackElement.Element(ParsedValue(symbol, generator(arr.toSeq).asInstanceOf[Value]), goto))
+          step(token)
         }
       }
-    }
-
-    tokens.flatMap(step).headOption match {
-      case Some(value) => value
-      case None => ??? // Error handling
+      case None => None
     }
   }
 }
@@ -202,10 +207,10 @@ object Parser {
   object ParseResult {
     final case class Token[+Value] private[parser](token: common.Token) extends ParseResult[Value] {
       override def asToken: common.Token = token
-      override def asValue: Value = ???
+      override def asValue: Value = throw new NotImplementedError("ParseResult.Value was expected, but it is ParseResult.Token")
     }
     final case class Value[+Value] private[parser](value: Value) extends ParseResult[Value] {
-      override def asToken: common.Token = ???
+      override def asToken: common.Token = throw new NotImplementedError("ParseResult.Token was expected, but it is ParseResult.Value")
       override def asValue: Value = value
     }
   }
