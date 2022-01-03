@@ -8,7 +8,7 @@ import parser.Parser.ParserStackTerm.{ParsedValue, Token}
 import parser.Parser.{AnalyseResult, ParseResult, ParserStackElement, ParserStackTerm}
 import parser.Term.NonTerminalSymbol.SpecialNonTerminal
 import parser.Term.Terminal.{EOF, EOFType, Sharp, SharpClass}
-import parser.Term.{NonTerminal, NonTerminalSymbol, Terminal, TokenType, nonTerminalSymbolToTerm}
+import parser.Term.{NonTerminal, NonTerminalSymbol, Terminal, TokenType}
 
 import java.util
 import scala.Function.unlift
@@ -26,9 +26,8 @@ final class Parser[Value] private(
   }
 
   private final class Stepper {
-    val stack = new mutable.ArrayStack[ParserStackElement[Value]]
-    stack += Bottom
-    var currentState = 0
+    private val stack = mutable.ArrayStack[ParserStackElement[Value]](Bottom)
+    private var currentState = 0
 
     @tailrec
     def step(token: common.Token): Option[Value] = termMap(currentState).get(token.getClass) match {
@@ -82,7 +81,7 @@ object Parser {
 
     def rule(left: NonTerminalSymbol, right: Array[Term], mapToValue: ResultGenerator[Value]): ParserBuilder[Value] = {
       val tup = Tuple2(right, mapToValue)
-      grammar(left) = grammar.get(left).map { buf => buf += tup }.getOrElse(ArrayBuffer(tup))
+      grammar.getOrElseUpdate(left, ArrayBuffer.empty) += tup
       for (c <- right) {
         c match {
           case Terminal(tokenType) => first.getOrElseUpdate(c, { mutable.Set(tokenType) })
@@ -97,8 +96,8 @@ object Parser {
       constructFirstAndNull()
       val (lr0State, gotoTable) = generateLR0State
       val lr0Kernel = calcLR0Kernel(lr0State)
-      val lalr1State = calcLALR1State(lr0Kernel, gotoTable)
-      constructLR1Table(lalr1State)
+      val lalr1Kernel = calcLALR1Kernel(lr0Kernel, gotoTable)
+      constructLR1Table(lalr1Kernel)
     }
 
     private def constructFirstAndNull(): Unit = {
@@ -138,10 +137,9 @@ object Parser {
 
     private def generateLR0State: (mutable.Map[LR0ItemSet, Int], mutable.Set[(Int, Int)]) = {
       val stateMap = mutable.Map(initialState -> 0)
-      val stack = mutable.ArrayStack[(Int, LR0ItemSet)]()
+      val stack = mutable.ArrayStack((0, initialState))
       val gotoTable = mutable.Set.empty[(Int, Int)]
 
-      stack.push((0, initialState))
       while (stack.nonEmpty) {
         val (currentState, term) = stack.pop()
         for (LR0StateItem(_, right, currentIndex, _) <- term) {
@@ -164,15 +162,12 @@ object Parser {
       (stateMap, gotoTable)
     }
 
-    private def calcLR0Kernel(stateMap: mutable.Map[LR0ItemSet, Int]): mutable.Map[LR0ItemSet, Int] = {
-      val kernel: mutable.Map[LR0ItemSet, Int] = stateMap.map { case (itemSet, state) =>
+    private def calcLR0Kernel(stateMap: mutable.Map[LR0ItemSet, Int]): mutable.Map[LR0ItemSet, Int] =
+      stateMap.map { case (itemSet, state) =>
         itemSet.filter { case LR0StateItem(left, _, i, _) => i > 0 || left == SpecialNonTerminal } -> state
       }
-      kernel
-    }
 
     private def constructLR1Table(states: mutable.Map[LR1ItemSet, Int]): Parser[Value] = {
-      val test = states.collectFirst(unlift { case (set,i) => if (set.exists { case LR1StateItem(LR0StateItem(k, _, i, _), tokenType) => k == SpecialNonTerminal && i == 1 }) Some((set,i)) else None }).get
       val termMap = ArrayBuffer.fill[mutable.Map[Class[_], AnalyseResult[Value]]](states.size) { mutable.Map.empty }
       val nonTermMap = ArrayBuffer.fill[mutable.Map[NonTerminalSymbol, Int]](states.size) { mutable.Map.empty }
 
@@ -201,7 +196,7 @@ object Parser {
               if (la == EOFType) {
                 termMap(state)(EOFType) = Accept
               } else {
-                ??? // error
+                throw new IllegalStateException(s"EOF was expected as a lookahead, but actually: $la")
               }
             } else {
               termMap(state)(la) = Reduce(left, right.length, generator)
@@ -221,15 +216,14 @@ object Parser {
       new Parser(tm, ntm)
     }
 
-    private def calcLALR1State(kernels: mutable.Map[LR0ItemSet, Int], gotoTable: mutable.Set[(Int, Int)]): mutable.Map[LR1ItemSet, Int] = {
+    private def calcLALR1Kernel(kernels: mutable.Map[LR0ItemSet, Int], gotoTable: mutable.Set[(Int, Int)]): mutable.Map[LR1ItemSet, Int] = {
       type ItemAndState = (Int, LR0StateItem)
       val propagation = mutable.Map.empty[ItemAndState, mutable.Set[ItemAndState]]
-      val stack = new mutable.ArrayStack[(ItemAndState, mutable.Set[TokenType])]
+      val stack = mutable.ArrayStack(((0, initialItem), mutable.Set[TokenType](EOFType)))
       val result = mutable.Map.empty[Int, mutable.Map[LR0StateItem, mutable.Set[TokenType]]]
 
-      stack.push(((0, initialItem), mutable.Set(EOFType)))
       result.put(0, mutable.Map(
-        LR0StateItem(NonTerminalSymbol.SpecialNonTerminal, Array[Term](Term.NonTerminal(initialTerm)), 0, { lastReduceRule }) -> mutable.Set[Class[_]](EOFType)
+        LR0StateItem(SpecialNonTerminal, Array[Term](NonTerminal(initialTerm)), 0, { lastReduceRule }) -> mutable.Set(EOFType)
       ))
 
       for ((kernel, state) <- kernels;
@@ -277,8 +271,8 @@ object Parser {
     }
 
     private def lr0closure(terms: LR0ItemSet): LR0ItemSet = {
-      val stack = mutable.Stack[LR0StateItem]()
-      stack.pushAll(terms)
+      val stack = mutable.ArrayStack[LR0StateItem]()
+      stack ++= terms
 
       while (stack.nonEmpty) {
         val LR0StateItem(_, right, currentIndex, _) = stack.pop()
@@ -310,8 +304,8 @@ object Parser {
     }
 
     private def lr1closure(terms: LR1ItemSet): LR1ItemSet = {
-      val stack = mutable.Stack[LR1StateItem]()
-      stack.pushAll(terms)
+      val stack = mutable.ArrayStack[LR1StateItem]()
+      stack ++= terms
 
       while (stack.nonEmpty) {
         val LR1StateItem(LR0StateItem(_, right, currentIndex, _), la) = stack.pop()
@@ -347,11 +341,9 @@ object Parser {
       lr1closure(tmp)
     }
 
-    private def lastReduceRule(arr: Seq[ParseResult[Value]]): Value = {
-      arr.head match {
-        case ParseResult.Value(value) => value
-        case _ => throw new IllegalStateException()
-      }
+    private def lastReduceRule(arr: Seq[ParseResult[Value]]): Value = arr.head match {
+      case ParseResult.Value(value) => value
+      case _ => throw new IllegalStateException()
     }
 
     private def firstOf(seq: Seq[Term]): Set[TokenType] = {
@@ -367,16 +359,7 @@ object Parser {
   }
 
   object ParserBuilder {
-    case class LR0StateItem[Value](left: NonTerminalSymbol, right: Array[Term], dot: Int, generator: ResultGenerator[Value]) {
-      override def hashCode(): Int = (31 * 31) * left.hashCode() + 31 * util.Arrays.hashCode(right.asInstanceOf[Array[Object]]) + dot
-
-      override def equals(obj: Any): Boolean = {
-        if (!obj.isInstanceOf[LR0StateItem[Value]]) return false
-        val that = obj.asInstanceOf[LR0StateItem[Value]]
-
-        this.left == that.left && (this.right sameElements that.right) && this.dot == that.dot
-      }
-    }
+    case class LR0StateItem[Value](left: NonTerminalSymbol, right: Array[Term], dot: Int, generator: ResultGenerator[Value])
     case class LR1StateItem[Value](item: LR0StateItem[Value], lookahead: TokenType)
   }
 
@@ -388,10 +371,10 @@ object Parser {
   object ParseResult {
     final case class Token[+Value] private[parser](token: common.Token) extends ParseResult[Value] {
       override def asToken: common.Token = token
-      override def asValue: Value = throw new NotImplementedError("ParseResult.Value was expected, but it is ParseResult.Token")
+      override def asValue: Value = throw new NotImplementedError("ParseResult.Value was expected, but this is ParseResult.Token")
     }
     final case class Value[+Value] private[parser](value: Value) extends ParseResult[Value] {
-      override def asToken: common.Token = throw new NotImplementedError("ParseResult.Token was expected, but it is ParseResult.Value")
+      override def asToken: common.Token = throw new NotImplementedError("ParseResult.Token was expected, but this is ParseResult.Value")
       override def asValue: Value = value
     }
   }

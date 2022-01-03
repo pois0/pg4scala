@@ -9,7 +9,8 @@ import parser.Term.NonTerminalSymbol
 import org.scalatest.funsuite.AnyFunSuite
 
 class ParserTest extends AnyFunSuite {
-  test("Simple Test") {
+  // The rule is quoted from "Modern Compiler Implementation in ML (New Edition)" (A. Appel)
+  test("LR(0) Test") {
     val rule = Parser.builder[Value](S)
       .rule(S, Array(LParen, L, RParen), { seq => seq(1).asValue })
       .rule(S, Array(Tokens.Id), { _ => Value.Id })
@@ -22,7 +23,8 @@ class ParserTest extends AnyFunSuite {
     testParse(rule, LParen #:: LParen #:: Tokens.Id #:: Comma #:: Tokens.Id #:: RParen #:: RParen #:: common.Token.EOF #:: Stream.Empty, Value.Cons(Value.Empty, Value.Cons(Value.Cons(Value.Empty, Value.Id), Value.Id)))
   }
 
-  test("LALR(0) Test") {
+  // The rule is quoted from "Compilers: Principles, Techniques, and Tools (Second Edition)" (A. Aho, et al.)
+  test("LALR(1) Test") {
     val rule = Parser.builder[Value](S)
       .rule(S, Array(L, Equal, R), { seq => Value.Equals(seq(0).asValue, seq(2).asValue) })
       .rule(S, Array(R), { seq => seq(0).asValue })
