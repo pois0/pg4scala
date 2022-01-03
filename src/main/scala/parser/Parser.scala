@@ -1,28 +1,28 @@
 package jp.pois.pg4scala
 package parser
 
-import parser.Parser.AnalyseResult.{Reduce, Shift}
-import parser.Parser.ParserBuilder.{ParserBuilderConstraints, Set, Unset}
+import parser.Parser.AnalyseResult.{Accept, Reduce, Shift}
+import parser.Parser.ParserBuilder.{LR0StateItem, LR1StateItem}
 import parser.Parser.ParserStackElement.Bottom
 import parser.Parser.ParserStackTerm.{ParsedValue, Token}
 import parser.Parser.{AnalyseResult, ParseResult, ParserStackElement, ParserStackTerm}
-import parser.Term.NonTerminalSymbol
-import utils.{ConstantMap, RawArrayBuffer}
+import parser.Term.NonTerminalSymbol.SpecialNonTerminal
+import parser.Term.Terminal.{EOF, EOFType, Sharp, SharpClass}
+import parser.Term.{NonTerminal, NonTerminalSymbol, Terminal, TokenType, nonTerminalSymbolToTerm}
 
+import java.util
+import scala.Function.unlift
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-class Parser[Value] private(
+final class Parser[Value] private(
   private val termMap: Array[Map[Class[_], AnalyseResult[Value]]],
   private val nonTermMap: Array[Map[NonTerminalSymbol, Int]]
 ) {
-  def parse(tokens: Stream[common.Token]): Value = {
-    val stepper = new Stepper
-    tokens.flatMap(stepper.step).headOption match {
-      case Some(value) => value
-      case None => ??? // Error handling
-    }
+  def parse(tokens: Stream[common.Token]): Value = tokens.flatMap((new Stepper).step).headOption match {
+    case Some(value) => value
+    case None => ??? // Error handling
   }
 
   private final class Stepper {
@@ -55,7 +55,10 @@ class Parser[Value] private(
           step(token)
         }
       }
-      case None => None
+      case None => {
+        println(s"Error / Token: $token, current: $currentState, table: ${termMap(currentState)}")
+        ???
+      }
     }
   }
 }
@@ -63,140 +66,318 @@ class Parser[Value] private(
 object Parser {
   type ResultGenerator[Value] = Seq[ParseResult[Value]] => Value
 
-  def builder[Value]: ParserBuilder[Value, Unset] = new ParserBuilder
+  def builder[Value](initialTerm: NonTerminalSymbol): ParserBuilder[Value] = new ParserBuilder(initialTerm)
 
-  class ParserBuilder[Value, Constraints <: ParserBuilderConstraints] private[Parser]
-  (
-    private val initialTerm: Option[NonTerminalSymbol] = None,
-    private val grammar: mutable.Map[NonTerminalSymbol, ArrayBuffer[(Array[Term], ResultGenerator[Value])]] =
-      mutable.Map.empty[NonTerminalSymbol, ArrayBuffer[(Array[Term], ResultGenerator[Value])]]
-  ) {
-    type TermWithDot = (NonTerminalSymbol, Array[Term], Int, ResultGenerator[Value])
-    type TermSet = mutable.Set[TermWithDot]
+  final class ParserBuilder[Value] private[Parser](private val initialTerm: NonTerminalSymbol) {
+    private val grammar = mutable.Map.empty[NonTerminalSymbol, ArrayBuffer[(Array[Term], ResultGenerator[Value])]]
+    private val first = mutable.Map[Term, mutable.Set[TokenType]]()
+    private val nullable = mutable.Set[Term]()
+    type LR0StateItem = ParserBuilder.LR0StateItem[Value]
+    type LR1StateItem = ParserBuilder.LR1StateItem[Value]
+    type LR0ItemSet = mutable.Set[LR0StateItem]
+    type LR1ItemSet = mutable.Set[LR1StateItem]
 
-    def build(implicit INITIAL_NON_TERMINAL_SET: Constraints =:= Set): Parser[Value] = {
-      def closure(terms: TermSet): TermSet = {
-        val stack = mutable.Stack.newBuilder.++=(terms).result()
+    private lazy val initialItem: LR0StateItem = LR0StateItem(NonTerminalSymbol.SpecialNonTerminal, Array(Term.NonTerminal(initialTerm)), 0, lastReduceRule)
+    private lazy val initialState = lr0closure(mutable.Set(initialItem))
 
-        while (stack.nonEmpty) {
-          val (_, right, currentIndex, _) = stack.pop()
+    def rule(left: NonTerminalSymbol, right: Array[Term], mapToValue: ResultGenerator[Value]): ParserBuilder[Value] = {
+      val tup = Tuple2(right, mapToValue)
+      grammar(left) = grammar.get(left).map { buf => buf += tup }.getOrElse(ArrayBuffer(tup))
+      for (c <- right) {
+        c match {
+          case Terminal(tokenType) => first.getOrElseUpdate(c, { mutable.Set(tokenType) })
+          case NonTerminal(_) =>
+        }
+      }
+
+      this
+    }
+
+    def build: Parser[Value] = {
+      constructFirstAndNull()
+      val (lr0State, gotoTable) = generateLR0State
+      val lr0Kernel = calcLR0Kernel(lr0State)
+      val lalr1State = calcLALR1State(lr0Kernel, gotoTable)
+      constructLR1Table(lalr1State)
+    }
+
+    private def constructFirstAndNull(): Unit = {
+      var flag = true
+      while(flag) {
+        flag = false
+        for ((left, rightList) <- grammar) {
+          val leftTerm = NonTerminal(left)
+
+          for ((right, _) <- rightList) {
+            if ((!nullable.contains(leftTerm)) && right.forall(nullable.contains)) {
+              nullable += leftTerm
+              flag = true
+            }
+            var i = 0
+            while (i < right.length) {
+              if (i == 0 || nullable(right(i - 1))) {
+                val c = right(i)
+                val cFirst = first.getOrElseUpdate(c, mutable.Set.empty)
+                val leftTermFirst = first.getOrElseUpdate(leftTerm, mutable.Set.empty)
+                if (!cFirst.subsetOf(leftTermFirst)) {
+                  leftTermFirst ++= cFirst
+                  flag = true
+                }
+                i += 1
+              } else {
+                i = Int.MaxValue
+              }
+            }
+          }
+        }
+      }
+
+      first(Sharp) = mutable.Set(SharpClass)
+      first(EOF) = mutable.Set(EOFType)
+    }
+
+    private def generateLR0State: (mutable.Map[LR0ItemSet, Int], mutable.Set[(Int, Int)]) = {
+      val stateMap = mutable.Map(initialState -> 0)
+      val stack = mutable.ArrayStack[(Int, LR0ItemSet)]()
+      val gotoTable = mutable.Set.empty[(Int, Int)]
+
+      stack.push((0, initialState))
+      while (stack.nonEmpty) {
+        val (currentState, term) = stack.pop()
+        for (LR0StateItem(_, right, currentIndex, _) <- term) {
           if (currentIndex < right.length) {
-            right(currentIndex) match {
-              case Term.NonTerminal(tmp) => {
-                grammar.getOrElse(tmp, Nil).foreach { case (tmpRight, generator) =>
-                  val candidate = (tmp, tmpRight, 0, generator)
+            val currentToken = right(currentIndex)
+            if (currentToken == Term.Terminal.EOF) {
+            } else {
+              val gt = lr0goto(term, currentToken)
+              val goto = stateMap.getOrElseUpdate(gt, {
+                val newIndex = stateMap.size
+                stack.push((newIndex, gt))
+                newIndex
+              })
+              gotoTable += currentState -> goto
+            }
+          }
+        }
+      }
+
+      (stateMap, gotoTable)
+    }
+
+    private def calcLR0Kernel(stateMap: mutable.Map[LR0ItemSet, Int]): mutable.Map[LR0ItemSet, Int] = {
+      val kernel: mutable.Map[LR0ItemSet, Int] = stateMap.map { case (itemSet, state) =>
+        itemSet.filter { case LR0StateItem(left, _, i, _) => i > 0 || left == SpecialNonTerminal } -> state
+      }
+      kernel
+    }
+
+    private def constructLR1Table(states: mutable.Map[LR1ItemSet, Int]): Parser[Value] = {
+      val test = states.collectFirst(unlift { case (set,i) => if (set.exists { case LR1StateItem(LR0StateItem(k, _, i, _), tokenType) => k == SpecialNonTerminal && i == 1 }) Some((set,i)) else None }).get
+      val termMap = ArrayBuffer.fill[mutable.Map[Class[_], AnalyseResult[Value]]](states.size) { mutable.Map.empty }
+      val nonTermMap = ArrayBuffer.fill[mutable.Map[NonTerminalSymbol, Int]](states.size) { mutable.Map.empty }
+
+      val stack = new mutable.ArrayStack[(LR1ItemSet, Int)]
+      stack ++= states
+
+      while (stack.nonEmpty) {
+        val (set, state) = stack.pop()
+        for (LR1StateItem(LR0StateItem(left, right, rightIndex, generator), la) <- set) {
+          if (rightIndex < right.length) {
+            val current = right(rightIndex)
+            val g = lr1goto(set, current)
+            val goto = states.getOrElseUpdate(g, {
+              val newIndex = termMap.size
+              stack.push((g, newIndex))
+              termMap.append(mutable.Map.empty)
+              nonTermMap.append(mutable.Map.empty)
+              newIndex
+            })
+            current match {
+              case Terminal(clazz) => termMap(state)(clazz) = Shift(goto)
+              case NonTerminal(symbol) => nonTermMap(state)(symbol) = goto
+            }
+          } else {
+            if (left == NonTerminalSymbol.SpecialNonTerminal) {
+              if (la == EOFType) {
+                termMap(state)(EOFType) = Accept
+              } else {
+                ??? // error
+              }
+            } else {
+              termMap(state)(la) = Reduce(left, right.length, generator)
+            }
+          }
+        }
+      }
+
+      val tm = new Array[Map[Class[_], AnalyseResult[Value]]](termMap.size)
+      val ntm = new Array[Map[NonTerminalSymbol, Int]](nonTermMap.size)
+
+      for (i <- termMap.indices) {
+        tm(i) = termMap(i).toMap
+        ntm(i) = nonTermMap(i).toMap
+      }
+
+      new Parser(tm, ntm)
+    }
+
+    private def calcLALR1State(kernels: mutable.Map[LR0ItemSet, Int], gotoTable: mutable.Set[(Int, Int)]): mutable.Map[LR1ItemSet, Int] = {
+      type ItemAndState = (Int, LR0StateItem)
+      val propagation = mutable.Map.empty[ItemAndState, mutable.Set[ItemAndState]]
+      val stack = new mutable.ArrayStack[(ItemAndState, mutable.Set[TokenType])]
+      val result = mutable.Map.empty[Int, mutable.Map[LR0StateItem, mutable.Set[TokenType]]]
+
+      stack.push(((0, initialItem), mutable.Set(EOFType)))
+      result.put(0, mutable.Map(
+        LR0StateItem(NonTerminalSymbol.SpecialNonTerminal, Array[Term](Term.NonTerminal(initialTerm)), 0, { lastReduceRule }) -> mutable.Set[Class[_]](EOFType)
+      ))
+
+      for ((kernel, state) <- kernels;
+           kItem <- kernel;
+           be <- lr1closure(mutable.Set(LR1StateItem(kItem, SharpClass)))) {
+        val LR1StateItem(LR0StateItem(left, right, rightIndex, _), la) = be
+        kernels.collectFirst(unlift { case (items, sc) =>
+          items.collectFirst(unlift { item =>
+            val LR0StateItem(lc, rc, ric, _) = item
+            if (left == lc && (right sameElements rc) && (rightIndex + 1) == ric && gotoTable.contains(state -> sc)) {
+              Some(item)
+            } else {
+              None
+            }
+          }).map { (_, sc) }
+        }).foreach { case (item, sc) =>
+          if (la == SharpClass) {
+            propagation.getOrElseUpdate((state, kItem), mutable.Set.empty) += Tuple2(sc, item)
+          } else {
+            result.getOrElseUpdate(sc, mutable.Map.empty).getOrElseUpdate(item, mutable.Set.empty) += la
+            stack.push(((sc, item), mutable.Set(la)))
+          }
+        }
+      }
+
+      while (stack.nonEmpty) {
+        val (ias, laS) = stack.pop()
+        propagation.getOrElseUpdate(ias, mutable.Set.empty).foreach { propTo =>
+          val (state, item) = propTo
+          val set = result.getOrElseUpdate(state, mutable.Map.empty).getOrElseUpdate(item, mutable.Set.empty)
+          if (!laS.subsetOf(set)) {
+            set ++= laS
+            stack.push((propTo, set))
+          }
+        }
+      }
+
+      mutable.Map.newBuilder.++=(
+        result.map { case (state, itemAndLa) =>
+          val kernel = itemAndLa.flatMap { case (item, laS) => laS.map { LR1StateItem(item, _) } }.toSeq
+          val res = lr1closure(mutable.Set(kernel:_*)) -> state
+          res
+        }
+      ).result()
+    }
+
+    private def lr0closure(terms: LR0ItemSet): LR0ItemSet = {
+      val stack = mutable.Stack[LR0StateItem]()
+      stack.pushAll(terms)
+
+      while (stack.nonEmpty) {
+        val LR0StateItem(_, right, currentIndex, _) = stack.pop()
+        if (currentIndex < right.length) {
+          right(currentIndex) match {
+            case Term.NonTerminal(tmp) => {
+              grammar.getOrElse(tmp, Nil).foreach { case (tmpRight, generator) =>
+                val candidate = LR0StateItem(tmp, tmpRight, 0, generator)
+                if (!terms.contains(candidate)) {
+                  stack.push(candidate)
+                  terms += candidate
+                }
+              }
+            }
+            case Term.Terminal(_) =>
+          }
+        }
+      }
+
+      terms
+    }
+
+    private def lr0goto(terms: LR0ItemSet, symbol: Term): LR0ItemSet = {
+      val tmp: LR0ItemSet = mutable.Set()
+      for (LR0StateItem(left, right, currentIndex, generator) <- terms if currentIndex < right.length && right(currentIndex) == symbol) {
+        tmp += LR0StateItem(left, right, currentIndex + 1, generator)
+      }
+      lr0closure(tmp)
+    }
+
+    private def lr1closure(terms: LR1ItemSet): LR1ItemSet = {
+      val stack = mutable.Stack[LR1StateItem]()
+      stack.pushAll(terms)
+
+      while (stack.nonEmpty) {
+        val LR1StateItem(LR0StateItem(_, right, currentIndex, _), la) = stack.pop()
+        if (currentIndex < right.length) {
+          right(currentIndex) match {
+            case Term.NonTerminal(tmp) => {
+              grammar.getOrElse(tmp, Nil).foreach { case (tmpRight, generator) =>
+                val follows = right.slice(currentIndex + 1, right.length).toSeq
+
+                for (c <- firstOf(follows ++ Seq(Terminal(la)))) {
+                  val candidate = LR1StateItem(LR0StateItem(tmp, tmpRight, 0, generator), c)
                   if (!terms.contains(candidate)) {
                     stack.push(candidate)
                     terms += candidate
                   }
                 }
               }
-              case Term.Terminal(_) =>
             }
-          }
-        }
-
-        terms
-      }
-
-      def goto(terms: TermSet, symbol: Term): TermSet = {
-        val tmp: TermSet = mutable.Set()
-        for ((left, right, currentIndex, generator) <- terms if currentIndex <= right.length && right(currentIndex) == symbol) {
-          tmp += Tuple4(left, right, currentIndex + 1, generator)
-        }
-        closure(tmp)
-      }
-
-      val initialState = closure(
-        mutable.Set(
-          Tuple4(NonTerminalSymbol.SpecialNonTerminal, Array(Term.NonTerminal(initialTerm.get), Term.Terminal[common.Token.EOF.type]), 0, { arr =>
-            arr.head match {
-              case ParseResult.Value(value) => value
-              case _ => throw new IllegalStateException()
-            } })
-        )
-      )
-
-      val stateMap = mutable.Map(initialState -> 0)
-      val reduceStates = mutable.Map[Int, (NonTerminalSymbol, Int, ResultGenerator[Value])]()
-
-      val termMap = new RawArrayBuffer[mutable.Map[Class[_], AnalyseResult[Value]]](1)
-      val nonTermMap = new RawArrayBuffer[mutable.Map[NonTerminalSymbol, Int]](1)
-
-      termMap(0) = mutable.Map()
-      nonTermMap(0) = mutable.Map()
-      val stack = mutable.ArrayStack[(Int, TermSet)]()
-
-      stack.push((0, initialState))
-      while (stack.nonEmpty) {
-        val (state, term) = stack.pop()
-        for ((left, right, currentIndex, generator) <- term) {
-          if (currentIndex < right.length) {
-            val currentToken = right(currentIndex)
-            if (currentToken == Term.Terminal.EOF) {
-              termMap(state)(common.Token.EOF.getClass) = AnalyseResult.Accept
-            } else {
-              val gt = goto(term, currentToken)
-              val gtState = stateMap.getOrElseUpdate(gt, {
-                val newIndex = stateMap.size
-                stack.push((newIndex, gt))
-                termMap(newIndex) = mutable.Map()
-                nonTermMap(newIndex) = mutable.Map()
-                newIndex
-              })
-
-              currentToken match {
-                case Term.Terminal(clazz) => termMap(state)(clazz) = Shift(gtState)
-                case Term.NonTerminal(symbol) => nonTermMap(state)(symbol) = gtState
-              }
-            }
-          } else {
-            if (reduceStates.contains(state)) {
-              throw new IllegalStateException("Reduce / Reduce conflict")
-            }
-            reduceStates(state) = (left, right.length, generator)
+            case Term.Terminal(_) =>
           }
         }
       }
 
-      val tm = new Array[Map[Class[_], AnalyseResult[Value]]](termMap.size)
-
-      println(stateMap.map { case (set, state) => (state, "$state:\n\t" + set.map { case (symbol, terms, i, generator) => s"($symbol -> ${terms.mkString(",")}, $i)" }.mkString(",\n\t")) }.toSeq.sortBy { case (i, str) => i }.mkString("\n"))
-
-      for (i <- termMap.indices) {
-        tm(i) = reduceStates.get(i)
-          .map { case (sym, num, generator) =>
-            val reduce = Reduce(sym, num, generator)
-            println(i, reduce)
-            new ConstantMap[Class[_], AnalyseResult[Value]](reduce) }
-          .getOrElse {
-            val m = termMap(i).toMap; println(i, m); m }
-      }
-
-      val ntm = new Array[Map[NonTerminalSymbol, Int]](nonTermMap.length)
-      for (i <- ntm.indices) {
-        ntm(i) = nonTermMap(i).toMap
-        println(i, ntm(i))
-      }
-
-      new Parser[Value](tm, ntm)
+      terms
     }
 
-    def initialTerm(symbol: NonTerminalSymbol): ParserBuilder[Value, Set] =
-      new ParserBuilder[Value, Set](Some(symbol), grammar)
+    private def lr1goto(terms: LR1ItemSet, symbol: Term): LR1ItemSet = {
+      val tmp: LR1ItemSet = mutable.Set()
+      for (LR1StateItem(LR0StateItem(left, right, currentIndex, generator), la) <- terms
+            if currentIndex < right.length && right(currentIndex) == symbol) {
+        tmp += LR1StateItem(LR0StateItem(left, right, currentIndex + 1, generator), la)
+      }
+      lr1closure(tmp)
+    }
 
-    def rule(left: NonTerminalSymbol, right: Array[Term], mapToValue: ResultGenerator[Value]): ParserBuilder[Value, Constraints] = {
-      val tup = Tuple2(right, mapToValue)
-      grammar(left) = grammar.get(left).map { buf => buf += tup }.getOrElse(ArrayBuffer(tup))
-      this
+    private def lastReduceRule(arr: Seq[ParseResult[Value]]): Value = {
+      arr.head match {
+        case ParseResult.Value(value) => value
+        case _ => throw new IllegalStateException()
+      }
+    }
+
+    private def firstOf(seq: Seq[Term]): Set[TokenType] = {
+      val result = Set.newBuilder[TokenType]
+      var i = 0
+      while (i < seq.length) {
+        val c = seq(i)
+        result ++= first(c)
+        i = if (nullable.contains(c)) i + 1 else seq.length
+      }
+      result.result()
     }
   }
 
   object ParserBuilder {
-    private[Parser] sealed trait ParserBuilderConstraints
+    case class LR0StateItem[Value](left: NonTerminalSymbol, right: Array[Term], dot: Int, generator: ResultGenerator[Value]) {
+      override def hashCode(): Int = (31 * 31) * left.hashCode() + 31 * util.Arrays.hashCode(right.asInstanceOf[Array[Object]]) + dot
 
-    private[Parser] trait Set extends ParserBuilderConstraints
-    private[Parser] trait Unset extends ParserBuilderConstraints
+      override def equals(obj: Any): Boolean = {
+        if (!obj.isInstanceOf[LR0StateItem[Value]]) return false
+        val that = obj.asInstanceOf[LR0StateItem[Value]]
+
+        this.left == that.left && (this.right sameElements that.right) && this.dot == that.dot
+      }
+    }
+    case class LR1StateItem[Value](item: LR0StateItem[Value], lookahead: TokenType)
   }
 
   sealed abstract class ParseResult[+Value] {

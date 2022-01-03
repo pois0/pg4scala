@@ -9,8 +9,15 @@ object Term {
   import scala.language.implicitConversions
   import scala.reflect.ClassTag
 
-  case class Terminal(clazz: Class[_]) extends Term {
+  type TokenType = Class[_]
+
+  case class Terminal(clazz: TokenType) extends Term {
     def check(token: Token): Boolean = clazz.isInstance(token)
+
+    override def equals(obj: Any): Boolean = obj match {
+      case other: Terminal => this.clazz == other.clazz
+      case _ => false
+    }
   }
 
   case class NonTerminal(symbol: NonTerminalSymbol) extends Term
@@ -19,7 +26,12 @@ object Term {
 
   object Terminal {
     def apply[A <: Token](implicit tag: ClassTag[A]): Terminal = new Terminal(tag.runtimeClass)
-    val EOF: Terminal = Terminal[Token.EOF.type]
+    private[parser] val EOF: Terminal = Terminal[Token.EOF.type]
+    private[parser] val EOFType = Token.EOF.getClass
+    private[parser] val Sharp = Terminal[SharpToken.type]
+    private[parser] val SharpClass = SharpToken.getClass
+
+    private object SharpToken extends Token
   }
 
   implicit def tokenToTerm(token: Token): Term = new Terminal(token.getClass)
@@ -27,10 +39,10 @@ object Term {
 
   object NonTerminalSymbol {
     def apply(identifier: String): NonTerminalSymbol = {
-      if (identifier.isEmpty) throw new IllegalArgumentException("identifier must be non-empty.")
+      if (identifier.isEmpty) throw new IllegalArgumentException("The identifier must be non-empty.")
       new NonTerminalSymbol(identifier)
     }
 
-    val SpecialNonTerminal = new NonTerminalSymbol("")
+    private[parser] val SpecialNonTerminal = new NonTerminalSymbol("")
   }
 }
