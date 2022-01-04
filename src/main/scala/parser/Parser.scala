@@ -10,7 +10,8 @@ import parser.Term.NonTerminalSymbol.SpecialNonTerminal
 import parser.Term.Terminal.{EOF, EOFType, Sharp, SharpClass}
 import parser.Term.{NonTerminal, NonTerminalSymbol, Terminal, TokenType}
 
-import java.util
+import com.typesafe.scalalogging.LazyLogging
+
 import scala.Function.unlift
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -19,10 +20,10 @@ import scala.collection.mutable.ArrayBuffer
 final class Parser[Value] private(
   private val termMap: Array[Map[Class[_], AnalyseResult[Value]]],
   private val nonTermMap: Array[Map[NonTerminalSymbol, Int]]
-) {
+) extends LazyLogging {
   def parse(tokens: Stream[common.Token]): Value = tokens.flatMap((new Stepper).step).headOption match {
     case Some(value) => value
-    case None => ??? // Error handling
+    case None => throw new IllegalArgumentException("The input is illegal.")
   }
 
   private final class Stepper {
@@ -34,16 +35,16 @@ final class Parser[Value] private(
       case Some(res) => res match {
         case AnalyseResult.Accept => stack.pop().term match {
           case ParsedValue(_, value) => Some(value)
-          case Token(_) => ??? // throw Error
+          case Token(_) => throw new IllegalStateException("The stack of the parser is broken so it failed to parse the input.")
         }
         case AnalyseResult.Shift(goto) => {
-          println(s"Shift / Token: $token, current: $currentState, goto: $goto")
+          logger.debug(s"Shift / Token: $token, current: $currentState, goto: $goto")
           stack.push(ParserStackElement.Element(ParserStackTerm.Token(token), goto))
           currentState = goto
           None
         }
         case AnalyseResult.Reduce(symbol: NonTerminalSymbol, numberOfRight, generator) => {
-          println(s"Reduce / Token: $token, current: $currentState")
+          logger.debug(s"Reduce / Token: $token, current: $currentState")
           val arr = new Array[ParseResult[Value]](numberOfRight)
           for (i <- arr.indices.reverse) {
             arr(i) = stack.pop().term.toResult
@@ -56,7 +57,7 @@ final class Parser[Value] private(
       }
       case None => {
         println(s"Error / Token: $token, current: $currentState, table: ${termMap(currentState)}")
-        ???
+        throw new IllegalArgumentException("The input is illegal.")
       }
     }
   }
@@ -67,7 +68,7 @@ object Parser {
 
   def builder[Value](initialTerm: NonTerminalSymbol): ParserBuilder[Value] = new ParserBuilder(initialTerm)
 
-  final class ParserBuilder[Value] private[Parser](private val initialTerm: NonTerminalSymbol) {
+  final class ParserBuilder[Value] private[Parser](private val initialTerm: NonTerminalSymbol) extends LazyLogging {
     private val grammar = mutable.Map.empty[NonTerminalSymbol, ArrayBuffer[(Array[Term], ResultGenerator[Value])]]
     private val first = mutable.Map[Term, mutable.Set[TokenType]]()
     private val nullable = mutable.Set[Term]()
@@ -188,7 +189,24 @@ object Parser {
               newIndex
             })
             current match {
-              case Terminal(clazz) => termMap(state)(clazz) = Shift(goto)
+              case Terminal(clazz) => {
+                termMap(state).get(clazz) match {
+                  case Some(value) => {
+                    // Conflict!
+                    value match {
+                      case Reduce(symbol, numberOfRight, generator) => {
+                        logger.warn("Shift / reduce conflict was occurred so the shift was ignored.")
+                      }
+                      case _ => {
+                        throw new IllegalStateException("Failed to generating the parser.")
+                      }
+                    }
+                  }
+                  case None => {
+                    termMap(state)(clazz) = Shift(goto)
+                  }
+                }
+              }
               case NonTerminal(symbol) => nonTermMap(state)(symbol) = goto
             }
           } else {
@@ -196,7 +214,8 @@ object Parser {
               if (la == EOFType) {
                 termMap(state)(EOFType) = Accept
               } else {
-                throw new IllegalStateException(s"EOF was expected as a lookahead, but actually: $la")
+                logger.error(s"EOF was expected as a lookahead, but actually: $la")
+                throw new IllegalStateException("Failed to generating the parser.")
               }
             } else {
               termMap(state)(la) = Reduce(left, right.length, generator)
