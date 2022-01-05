@@ -21,9 +21,9 @@ class Lexer private[Lexer](private val dfa: DFA) {
     var broken = false
     var startAt = CharPosition(currentRow, currentColumn, currentIndex)
 
-    def read() = reader.read()
+    @inline def read() = reader.read()
 
-    def pushAndRead(prev: Int) = {
+    @inline def pushAndRead(prev: Int) = {
       strBuf.append(prev.toChar)
       val c = read()
       currentIndex += 1
@@ -33,7 +33,7 @@ class Lexer private[Lexer](private val dfa: DFA) {
       c
     }
 
-    def shift(): Unit = {
+    @inline def shift(): Unit = {
       currentIndex += 1
       currentColumn += 1
     }
@@ -46,7 +46,7 @@ class Lexer private[Lexer](private val dfa: DFA) {
       }
     }
 
-    def currentCharPosition = CharPosition(currentRow, currentColumn, currentIndex)
+    @inline def currentCharPosition = CharPosition(currentRow, currentColumn, currentIndex)
 
     def reset(): MatchedContext = {
       val startAtTmp = startAt
@@ -60,22 +60,28 @@ class Lexer private[Lexer](private val dfa: DFA) {
       MatchedContext(matchedString, startAtTmp, current)
     }
 
-    def loop(state: State, c: Int): Stream[Token] = {
-      if (c < 0) {
-        dfa.currentResult(state) match {
-          case TransitionResult.Accepted(tokenGen) => {
-            shift()
-            tokenGen(reset()) #:: EOF #:: Stream.empty
+    def loop(state: State, char: Int): Stream[Token] = {
+      var currentState = state
+      var c = char
+
+      while (c >= 0) {
+        dfa.transit(currentState, c) match {
+          case TransitionResult.OnGoing(state) => {
+            currentState = state
+            c = pushAndRead(c)
           }
-          case TransitionResult.Rejected => throw new MismatchedCharException
-          case TransitionResult.OnGoing(_) => throw new UnsupportedOperationException
-        }
-      } else {
-        dfa.transit(state, c) match {
-          case TransitionResult.OnGoing(state) => loop(state, pushAndRead(c))
-          case TransitionResult.Accepted(tokenGen) => tokenGen(reset()) #:: loop(DFA.State.initialState, c)
+          case TransitionResult.Accepted(tokenGen) => return tokenGen(reset()) #:: loop(DFA.State.initialState, c)
           case TransitionResult.Rejected => throw new MismatchedCharException
         }
+      }
+
+      dfa.currentResult(currentState) match {
+        case TransitionResult.Accepted(tokenGen) => {
+          shift()
+          tokenGen(reset()) #:: EOF #:: Stream.empty
+        }
+        case TransitionResult.Rejected => throw new MismatchedCharException
+        case TransitionResult.OnGoing(_) => throw new UnsupportedOperationException
       }
     }
 

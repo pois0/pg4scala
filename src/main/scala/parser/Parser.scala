@@ -52,6 +52,7 @@ final class Parser[Value] private(
           }
           val goto = nonTermMap(stack.top.state)(symbol)
           currentState = goto
+          //noinspection ScalaRedundantCast
           stack.push(ParserStackElement.Element(ParsedValue(symbol, generator(arr.toSeq).asInstanceOf[Value]), goto))
           step(token)
         }
@@ -320,26 +321,24 @@ object Parser {
 
     private def lr1closure(terms: LR1ItemSet): LR1ItemSet = {
       val stack = mutable.ArrayStack[LR1StateItem]()
-      stack ++= terms
+      for (term <- terms if !term.isScanFinished) stack += term
 
       while (stack.nonEmpty) {
         val LR1StateItem(LR0StateItem(_, right, currentIndex, _), la) = stack.pop()
-        if (currentIndex < right.length) {
-          right(currentIndex) match {
-            case Term.NonTerminal(tmp) => {
-              val follows = right.slice(currentIndex + 1, right.length).toSeq
-              grammar.getOrElse(tmp, Nil).foreach { case (tmpRight, generator) =>
-                for (c <- firstOf(follows ++ Seq(Terminal(la)))) {
-                  val candidate = LR1StateItem(LR0StateItem(tmp, tmpRight, 0, generator), c)
-                  if (!terms.contains(candidate)) {
-                    stack.push(candidate)
-                    terms += candidate
-                  }
+        right(currentIndex) match {
+          case Term.NonTerminal(tmp) => {
+            val follows = right.slice(currentIndex + 1, right.length).toSeq
+            grammar.getOrElse(tmp, Nil).foreach { case (tmpRight, generator) =>
+              for (c <- firstOf(follows ++ Seq(Terminal(la)))) {
+                val candidate = LR1StateItem(LR0StateItem(tmp, tmpRight, 0, generator), c)
+                if (!terms.contains(candidate)) {
+                  if (tmpRight.nonEmpty) stack.push(candidate)
+                  terms += candidate
                 }
               }
             }
-            case Term.Terminal(_) =>
           }
+          case Term.Terminal(_) =>
         }
       }
 
@@ -355,7 +354,7 @@ object Parser {
       lr1closure(tmp)
     }
 
-    private def lastReduceRule(arr: Seq[ParseResult[Value]]): Value = arr.head match {
+    private def lastReduceRule(arr: Seq[ParseResult[Value]]) = arr.head match {
       case ParseResult.Value(value) => value
       case _ => throw new IllegalStateException()
     }
@@ -372,9 +371,13 @@ object Parser {
     }
   }
 
-  object ParserBuilder {
-    case class LR0StateItem[Value](left: NonTerminalSymbol, right: Array[Term], dot: Int, generator: ResultGenerator[Value])
-    case class LR1StateItem[Value](item: LR0StateItem[Value], lookahead: TokenType)
+  private[parser] object ParserBuilder {
+    final case class LR0StateItem[Value](left: NonTerminalSymbol, right: Array[Term], dot: Int, generator: ResultGenerator[Value]) {
+      @inline def isScanFinished: Boolean = dot == right.length
+    }
+    final case class LR1StateItem[Value](item: LR0StateItem[Value], lookahead: TokenType) {
+      @inline def isScanFinished: Boolean = item.isScanFinished
+    }
   }
 
   sealed abstract class ParseResult[+Value] {
