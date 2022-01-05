@@ -11,7 +11,7 @@ import utils.RawArrayBuffer
 import scala.collection.mutable
 import scala.language.implicitConversions
 
-case class DFA private(private val table: Array[Map[Int, State]], private val resultMap: Map[Int, TokenGenerator]) {
+private[lexer] case class DFA private(private val table: Array[Map[Int, State]], private val resultMap: Map[Int, TokenGenerator]) {
   def transit(currentState: State, input: Int): TransitionResult =
     table(currentState).get(input).map(OnGoing).getOrElse { currentResult(currentState) }
 

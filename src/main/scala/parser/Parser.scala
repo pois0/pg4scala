@@ -11,6 +11,7 @@ import parser.Term.Terminal.{EOF, EOFType, Sharp, SharpClass}
 import parser.Term.{NonTerminal, Terminal, TokenType}
 
 import com.typesafe.scalalogging.LazyLogging
+import jp.pois.pg4scala.parser.NonTerminalSymbol.TopInitialSymbol
 
 import scala.Function.unlift
 import scala.annotation.tailrec
@@ -136,41 +137,42 @@ object Parser {
       first(EOF) = mutable.Set(EOFType)
     }
 
-    private def generateLR0State: (mutable.Map[LR0ItemSet, Int], mutable.Set[(Int, Int)]) = {
+    private def generateLR0State: (mutable.Map[LR0ItemSet, Int], Set[(Int, Int)]) = {
       val stateMap = mutable.Map(initialState -> 0)
       val stack = mutable.ArrayStack((0, initialState))
-      val gotoTable = mutable.Set.empty[(Int, Int)]
+      val gotoTable = Set.newBuilder[(Int, Int)]
 
       while (stack.nonEmpty) {
         val (currentState, term) = stack.pop()
-        for (LR0StateItem(_, right, currentIndex, _) <- term) {
-          if (currentIndex < right.length) {
-            val currentToken = right(currentIndex)
-            if (currentToken == Term.Terminal.EOF) {
-            } else {
-              val gt = lr0goto(term, currentToken)
-              val goto = stateMap.getOrElseUpdate(gt, {
-                val newIndex = stateMap.size
-                stack.push((newIndex, gt))
-                newIndex
-              })
-              gotoTable += currentState -> goto
-            }
+        for (LR0StateItem(_, right, currentIndex, _) <- term if currentIndex < right.length) {
+          val currentToken = right(currentIndex)
+          if (currentToken != Term.Terminal.EOF) {
+            val gt = lr0goto(term, currentToken)
+            val goto = stateMap.getOrElseUpdate(gt, {
+              val newIndex = stateMap.size
+              stack.push((newIndex, gt))
+              newIndex
+            })
+            gotoTable += currentState -> goto
           }
         }
       }
 
-      (stateMap, gotoTable)
+      (stateMap, gotoTable.result())
     }
 
-    private def calcLR0Kernel(stateMap: mutable.Map[LR0ItemSet, Int]): mutable.Map[LR0ItemSet, Int] =
-      stateMap.map { case (itemSet, state) =>
-        itemSet.filter { case LR0StateItem(left, _, i, _) => i > 0 || left == TopInitialSymbol } -> state
+    private def calcLR0Kernel(stateMap: mutable.Map[LR0ItemSet, Int]): Map[LR0ItemSet, Int] = {
+      val result = Map.newBuilder[LR0ItemSet, Int]
+      for ((itemSet, state)<- stateMap) {
+        val key = itemSet.filter { case LR0StateItem(left, _, i, _) => i > 0 || left == TopInitialSymbol }
+        result += key -> state
       }
+      result.result()
+    }
 
     private def constructLR1Table(states: mutable.Map[LR1ItemSet, Int]): Parser[Value] = {
-      val termMap = ArrayBuffer.fill[mutable.Map[Class[_], AnalyseResult[Value]]](states.size) { mutable.Map.empty }
-      val nonTermMap = ArrayBuffer.fill[mutable.Map[NonTerminalSymbol, Int]](states.size) { mutable.Map.empty }
+      val termMap = ArrayBuffer.fill(states.size) { mutable.Map.empty[Class[_], AnalyseResult[Value]] }
+      val nonTermMap = ArrayBuffer.fill(states.size) { mutable.Map.empty[NonTerminalSymbol, Int] }
 
       val stack = new mutable.ArrayStack[(LR1ItemSet, Int)]
       stack ++= states
@@ -191,17 +193,10 @@ object Parser {
             current match {
               case Terminal(clazz) => {
                 termMap(state).get(clazz) match {
-                  case Some(value) => {
-                    // Conflict!
-                    value match {
-                      case Reduce(symbol, numberOfRight, generator) => {
-                        logger.warn("Shift / reduce conflict was occurred so the shift was ignored.")
-                      }
-                      case Shift(_) => {}
-                      case Accept => {
-                        throw new IllegalStateException("Failed to generating the parser.")
-                      }
-                    }
+                  case Some(value) => value match {
+                    case Reduce(_, _, _) => logger.warn("Shift / reduce conflict was occurred so the shift was ignored.")
+                    case Accept => throw new IllegalStateException("Failed to generating the parser.")
+                    case _ =>
                   }
                   case None => {
                     termMap(state)(clazz) = Shift(goto)
@@ -236,7 +231,7 @@ object Parser {
       new Parser(tm, ntm)
     }
 
-    private def calcLALR1Kernel(kernels: mutable.Map[LR0ItemSet, Int], gotoTable: mutable.Set[(Int, Int)]): mutable.Map[LR1ItemSet, Int] = {
+    private def calcLALR1Kernel(kernels: Map[LR0ItemSet, Int], gotoTable: Set[(Int, Int)]): mutable.Map[LR1ItemSet, Int] = {
       type ItemAndState = (Int, LR0StateItem)
       val propagation = mutable.Map.empty[ItemAndState, mutable.Set[ItemAndState]]
       val stack = mutable.ArrayStack(((0, initialItem), mutable.Set[TokenType](EOFType)))
@@ -332,9 +327,8 @@ object Parser {
         if (currentIndex < right.length) {
           right(currentIndex) match {
             case Term.NonTerminal(tmp) => {
+              val follows = right.slice(currentIndex + 1, right.length).toSeq
               grammar.getOrElse(tmp, Nil).foreach { case (tmpRight, generator) =>
-                val follows = right.slice(currentIndex + 1, right.length).toSeq
-
                 for (c <- firstOf(follows ++ Seq(Terminal(la)))) {
                   val candidate = LR1StateItem(LR0StateItem(tmp, tmpRight, 0, generator), c)
                   if (!terms.contains(candidate)) {
