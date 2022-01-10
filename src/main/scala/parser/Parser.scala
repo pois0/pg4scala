@@ -197,7 +197,8 @@ object Parser {
                       case Reduce(symbol, numberOfRight, generator) => {
                         logger.warn("Shift / reduce conflict was occurred so the shift was ignored.")
                       }
-                      case _ => {
+                      case Shift(_) => {}
+                      case Accept => {
                         throw new IllegalStateException("Failed to generating the parser.")
                       }
                     }
