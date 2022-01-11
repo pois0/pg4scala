@@ -13,54 +13,17 @@ import java.io.Reader
 import scala.collection.mutable.ArrayBuffer
 
 class Lexer private[Lexer](private val dfa: DFA) {
-  def lex(reader: Reader): Stream[Token] = {
-    val strBuf = StringBuilder.newBuilder
-    var currentIndex = 0
-    var currentRow = 0
-    var currentColumn = 0
-    var broken = false
-    var startAt = CharPosition(currentRow, currentColumn, currentIndex)
+  def lex(reader: Reader): Stream[Token] = new Stepper(reader).loop(DFA.State.initialState).filterNot { _ eq Skip }
 
-    @inline def read() = reader.read()
+  private class Stepper(private val reader: Reader) {
+    private val strBuf = StringBuilder.newBuilder
+    private var currentIndex = 0
+    private var currentRow = 0
+    private var currentColumn = 0
+    private var broken = false
+    private var startAt = CharPosition(currentRow, currentColumn, currentIndex)
 
-    @inline def pushAndRead(prev: Int) = {
-      strBuf.append(prev.toChar)
-      val c = read()
-      currentIndex += 1
-      currentColumn += 1
-      handleLineBreak()
-      if (isBreakChar(c)) broken = true
-      c
-    }
-
-    @inline def shift(): Unit = {
-      currentIndex += 1
-      currentColumn += 1
-    }
-
-    def handleLineBreak(): Unit = {
-      if (broken) {
-        currentRow += 1
-        currentColumn = -1
-        broken = false
-      }
-    }
-
-    @inline def currentCharPosition = CharPosition(currentRow, currentColumn, currentIndex)
-
-    def reset(): MatchedContext = {
-      val startAtTmp = startAt
-      val current = currentCharPosition
-      val matchedString = strBuf.result
-      startAt = if (broken) {
-        handleLineBreak()
-        currentCharPosition
-      } else current
-      strBuf.clear
-      MatchedContext(matchedString, startAtTmp, current)
-    }
-
-    def loop(state: State, char: Int): Stream[Token] = {
+    def loop(state: State, char: Int = read()): Stream[Token] = {
       var currentState = state
       var c = char
 
@@ -85,7 +48,42 @@ class Lexer private[Lexer](private val dfa: DFA) {
       }
     }
 
-    loop(DFA.State.initialState, read()).filterNot { _ eq Skip }
+    @inline private def read() = reader.read()
+
+    @inline private def pushAndRead(prev: Int) = {
+      strBuf.append(prev.toChar)
+      val c = read()
+      currentIndex += 1
+      currentColumn += 1
+      if (broken) handleLineBreak()
+      if (isBreakChar(c)) broken = true
+      c
+    }
+
+    @inline private def shift(): Unit = {
+      currentIndex += 1
+      currentColumn += 1
+    }
+
+    private def handleLineBreak(): Unit = {
+      currentRow += 1
+      currentColumn = -1
+      broken = false
+    }
+
+    @inline private def currentCharPosition = CharPosition(currentRow, currentColumn, currentIndex)
+
+    private def reset(): MatchedContext = {
+      val startAtTmp = startAt
+      val current = currentCharPosition
+      val matchedString = strBuf.result
+      startAt = if (broken) {
+        handleLineBreak()
+        currentCharPosition
+      } else current
+      strBuf.clear
+      MatchedContext(matchedString, startAtTmp, current)
+    }
   }
 }
 
