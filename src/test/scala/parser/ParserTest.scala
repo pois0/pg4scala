@@ -4,7 +4,6 @@ package parser
 import parser.ParserTest.Tokens._
 import parser.ParserTest.Value.{Equals, Unary}
 import parser.ParserTest._
-import parser.Term.NonTerminalSymbol
 
 import org.scalatest.funsuite.AnyFunSuite
 

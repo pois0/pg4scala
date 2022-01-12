@@ -1,14 +1,14 @@
 package jp.pois.pg4scala
 package parser
 
+import parser.NonTerminalSymbol.TopInitialSymbol
 import parser.Parser.AnalyseResult.{Accept, Reduce, Shift}
 import parser.Parser.ParserBuilder.{LR0StateItem, LR1StateItem}
 import parser.Parser.ParserStackElement.Bottom
 import parser.Parser.ParserStackTerm.{ParsedValue, Token}
 import parser.Parser.{AnalyseResult, ParseResult, ParserStackElement, ParserStackTerm}
-import parser.Term.NonTerminalSymbol.SpecialNonTerminal
 import parser.Term.Terminal.{EOF, EOFType, Sharp, SharpClass}
-import parser.Term.{NonTerminal, NonTerminalSymbol, Terminal, TokenType}
+import parser.Term.{NonTerminal, Terminal, TokenType}
 
 import com.typesafe.scalalogging.LazyLogging
 
@@ -77,7 +77,7 @@ object Parser {
     type LR0ItemSet = mutable.Set[LR0StateItem]
     type LR1ItemSet = mutable.Set[LR1StateItem]
 
-    private lazy val initialItem: LR0StateItem = LR0StateItem(NonTerminalSymbol.SpecialNonTerminal, Array(Term.NonTerminal(initialTerm)), 0, lastReduceRule)
+    private lazy val initialItem: LR0StateItem = LR0StateItem(TopInitialSymbol, Array(Term.NonTerminal(initialTerm)), 0, lastReduceRule)
     private lazy val initialState = lr0closure(mutable.Set(initialItem))
 
     def rule(left: NonTerminalSymbol, right: Array[Term], mapToValue: ResultGenerator[Value]): ParserBuilder[Value] = {
@@ -165,7 +165,7 @@ object Parser {
 
     private def calcLR0Kernel(stateMap: mutable.Map[LR0ItemSet, Int]): mutable.Map[LR0ItemSet, Int] =
       stateMap.map { case (itemSet, state) =>
-        itemSet.filter { case LR0StateItem(left, _, i, _) => i > 0 || left == SpecialNonTerminal } -> state
+        itemSet.filter { case LR0StateItem(left, _, i, _) => i > 0 || left == TopInitialSymbol } -> state
       }
 
     private def constructLR1Table(states: mutable.Map[LR1ItemSet, Int]): Parser[Value] = {
@@ -211,7 +211,7 @@ object Parser {
               case NonTerminal(symbol) => nonTermMap(state)(symbol) = goto
             }
           } else {
-            if (left == NonTerminalSymbol.SpecialNonTerminal) {
+            if (left == TopInitialSymbol) {
               if (la == EOFType) {
                 termMap(state)(EOFType) = Accept
               } else {
@@ -243,7 +243,7 @@ object Parser {
       val result = mutable.Map.empty[Int, mutable.Map[LR0StateItem, mutable.Set[TokenType]]]
 
       result.put(0, mutable.Map(
-        LR0StateItem(SpecialNonTerminal, Array[Term](NonTerminal(initialTerm)), 0, { lastReduceRule }) -> mutable.Set(EOFType)
+        LR0StateItem(TopInitialSymbol, Array[Term](NonTerminal(initialTerm)), 0, { lastReduceRule }) -> mutable.Set(EOFType)
       ))
 
       for ((kernel, state) <- kernels;

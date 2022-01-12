@@ -72,8 +72,6 @@ private[lexer] object NFA {
       }
       case Regex.Wildcard => {
         buf += new NumericConstantMap(0 until ASCII_SIZE, Seq(finishState))
-        0 to ASCII_SIZE
-        buf += (0 until ASCII_SIZE).map(_ -> Seq(finishState)).toMap
         1
       }
     }

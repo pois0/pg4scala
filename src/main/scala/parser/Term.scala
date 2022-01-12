@@ -22,8 +22,6 @@ object Term {
 
   case class NonTerminal(symbol: NonTerminalSymbol) extends Term
 
-  case class NonTerminalSymbol private(identifier: String) extends AnyVal
-
   object Terminal {
     def apply[A <: Token](implicit tag: ClassTag[A]): Terminal = new Terminal(tag.runtimeClass)
     private[parser] val EOF: Terminal = Terminal[Token.EOF.type]
@@ -36,13 +34,4 @@ object Term {
 
   implicit def tokenToTerm(token: Token): Term = new Terminal(token.getClass)
   implicit def nonTerminalSymbolToTerm(symbol: NonTerminalSymbol): Term = NonTerminal(symbol)
-
-  object NonTerminalSymbol {
-    def apply(identifier: String): NonTerminalSymbol = {
-      if (identifier.isEmpty) throw new IllegalArgumentException("The identifier must be non-empty.")
-      new NonTerminalSymbol(identifier)
-    }
-
-    private[parser] val SpecialNonTerminal = new NonTerminalSymbol("")
-  }
 }
