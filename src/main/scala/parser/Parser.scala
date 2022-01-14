@@ -72,7 +72,7 @@ object Parser {
   final class ParserBuilder[Value] private[Parser](private val initialTerm: NonTerminalSymbol) extends LazyLogging {
     private val grammar = mutable.Map.empty[NonTerminalSymbol, ArrayBuffer[(Array[Character], ResultGenerator[Value])]]
     private val first = mutable.Map[Character, mutable.Set[TokenType]]()
-    private val nullable = mutable.Set[Character]()
+    private val nullable = mutable.Set[NonTerminalSymbol]()
     type LR0StateItem = ParserBuilder.LR0StateItem[Value]
     type LR1StateItem = ParserBuilder.LR1StateItem[Value]
     type LR0ItemSet = mutable.Set[LR0StateItem]
@@ -84,6 +84,7 @@ object Parser {
     def rule(left: NonTerminalSymbol, right: Array[Character], mapToValue: ResultGenerator[Value]): ParserBuilder[Value] = {
       val tup = Tuple2(right, mapToValue)
       grammar.getOrElseUpdate(left, ArrayBuffer.empty) += tup
+      if (right.isEmpty) nullable += left
       for (c <- right) {
         c match {
           case Terminal(tokenType) => first.getOrElseUpdate(c, { mutable.Set(tokenType) })
@@ -110,13 +111,13 @@ object Parser {
           val leftTerm = NonTerminal(left)
 
           for ((right, _) <- rightList) {
-            if ((!nullable.contains(leftTerm)) && right.forall(nullable.contains)) {
-              nullable += leftTerm
+            if ((!isNullable(leftTerm)) && right.forall(isNullable)) {
+              nullable += left
               flag = true
             }
             var i = 0
             while (i < right.length) {
-              if (i == 0 || nullable(right(i - 1))) {
+              if (i == 0 || isNullable(right(i - 1))) {
                 val c = right(i)
                 val cFirst = first.getOrElseUpdate(c, mutable.Set.empty)
                 val leftTermFirst = first.getOrElseUpdate(leftTerm, mutable.Set.empty)
@@ -353,6 +354,11 @@ object Parser {
       lr1closure(tmp)
     }
 
+    private def isNullable(c: Character) = c match {
+      case Terminal(_) => false
+      case NonTerminal(symbol) => nullable.contains(symbol)
+    }
+
     private def lastReduceRule(arr: Seq[ParseResult[Value]]) = arr.head match {
       case ParseResult.Value(value) => value
       case _ => throw new IllegalStateException()
@@ -364,7 +370,7 @@ object Parser {
       while (i < seq.length) {
         val c = seq(i)
         result ++= first(c)
-        i = if (nullable.contains(c)) i + 1 else seq.length
+        i = if (isNullable(c)) i + 1 else seq.length
       }
       result.result()
     }
