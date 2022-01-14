@@ -11,7 +11,7 @@ object Character {
 
   type TokenType = Class[_]
 
-  case class Terminal(clazz: TokenType) extends Character {
+  final case class Terminal(clazz: TokenType) extends Character {
     def check(token: Token): Boolean = clazz.isInstance(token)
 
     override def equals(obj: Any): Boolean = obj match {
@@ -20,7 +20,7 @@ object Character {
     }
   }
 
-  case class NonTerminal(symbol: NonTerminalSymbol) extends Character
+  final case class NonTerminal(symbol: NonTerminalSymbol) extends Character
 
   object Terminal {
     def apply[A <: Token](implicit tag: ClassTag[A]): Terminal = new Terminal(tag.runtimeClass)

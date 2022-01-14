@@ -11,7 +11,7 @@ import utils.RawArrayBuffer
 import scala.collection.mutable
 import scala.language.implicitConversions
 
-private[lexer] case class DFA private(private val table: Array[Map[Int, State]], private val resultMap: Map[Int, TokenGenerator]) {
+private[lexer] final case class DFA private(private val table: Array[Map[Int, State]], private val resultMap: Map[Int, TokenGenerator]) {
   def transit(currentState: State, input: Int): TransitionResult =
     table(currentState).get(input).map(OnGoing).getOrElse { currentResult(currentState) }
 
@@ -71,14 +71,6 @@ object DFA {
   }
 
   private implicit def stateToInt(state: State): Int = state.value
-
-  implicit class DFAExtension(private val dfa: DFA) {
-    def transit(currentState: State, input: Char): TransitionResult = {
-      val inputInt = input.toInt
-      if (input >= ASCII_SIZE) throw new IllegalArgumentException // TODO Exception message
-      dfa.transit(currentState, inputInt)
-    }
-  }
 
   private class TransitionTable(private val table: Array[Int]) {
     def apply(currentState: State, input: Int): State = table(currentState * ASCII_SIZE + input)

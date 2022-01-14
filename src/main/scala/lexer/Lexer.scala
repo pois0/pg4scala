@@ -12,7 +12,7 @@ import lexer.exceptions.MismatchedCharException
 import java.io.Reader
 import scala.collection.mutable.ArrayBuffer
 
-class Lexer private[Lexer](private val dfa: DFA) {
+final class Lexer private[Lexer](private val dfa: DFA) {
   def lex(reader: Reader): Stream[Token] = new Stepper(reader).loop(DFA.State.initialState).filterNot { _ eq Skip }
 
   private class Stepper(private val reader: Reader) {

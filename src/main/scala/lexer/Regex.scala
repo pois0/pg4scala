@@ -43,7 +43,7 @@ object Regex {
   def epsilon: Regex = Epsilon
   def wildcard: Regex = Wildcard
 
-  implicit class RegexFuncs(val self: Regex) {
+  implicit final class RegexFuncs(val self: Regex) {
     def |(that: Regex): Regex = EnumeratedAlternation(Array(self, that))
     def *(that: Regex): Regex = Concatenation(Array(self, that))
     def rep0: Regex = Repetition(self)

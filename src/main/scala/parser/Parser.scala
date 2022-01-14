@@ -390,7 +390,7 @@ object Parser {
     def asValue: Value
   }
 
-  object ParseResult {
+  private[parser] object ParseResult {
     final case class Token[+Value] private[parser](token: common.Token) extends ParseResult[Value] {
       override def asToken: common.Token = token
       override def asValue: Value = throw new NotImplementedError("ParseResult.Value was expected, but this is ParseResult.Token")
@@ -414,9 +414,9 @@ object Parser {
     def state: Int
   }
 
-  object ParserStackElement {
-    private[parser] case class Element[Value](term: ParserStackTerm[Value], state: Int) extends ParserStackElement[Value]
-    private[parser] case object Bottom extends ParserStackElement[Nothing] {
+  private[parser] object ParserStackElement {
+    final case class Element[Value](term: ParserStackTerm[Value], state: Int) extends ParserStackElement[Value]
+    final case object Bottom extends ParserStackElement[Nothing] {
       override def term: ParserStackTerm[Nothing] = throw new IllegalStateException()
       override def state: Int = 0
     }

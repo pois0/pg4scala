@@ -11,7 +11,7 @@ import java.util
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-private[lexer] case class NFA(table: mutable.Buffer[Transit], initialState: Int, resultMap: Map[Int, TokenGenerator], resultOrder: Map[TokenGenerator, Int])
+private[lexer] final case class NFA(table: mutable.Buffer[Transit], initialState: Int, resultMap: Map[Int, TokenGenerator], resultOrder: Map[TokenGenerator, Int])
 
 private[lexer] object NFA {
   type Transit = Map[Int, Seq[Int]]
