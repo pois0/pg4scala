@@ -3,9 +3,9 @@ package lexer
 
 import lexer.Lexer.TokenGenerator
 import lexer.NFA.Transit
-import lexer.Regex.Alternation.{EnumeratedAlternation, RangeAlternation}
-import lexer.Utils.ASCII_SIZE
-import utils.NumericConstantMap
+import lexer.Regex.Alternation.{CharacterClassAlternation, CustomSingleAlternation, EnumeratedAlternation, RangeAlternation}
+import utils.Character.UnicodeRange
+import utils.{IntArrayIndicatorMap, IntCustomMap, IntRangeConstantMap}
 
 import java.util
 import scala.collection.mutable
@@ -29,8 +29,16 @@ private[lexer] object NFA {
         buf += Map(c -> Seq(finishState))
         1
       }
+      case CharacterClassAlternation(chars) => {
+        buf += new IntArrayIndicatorMap(chars, Seq(finishState))
+        1
+      }
       case RangeAlternation(range) => {
-        buf += new NumericConstantMap[Seq[Int]](range, Seq(finishState))
+        buf += new IntRangeConstantMap[Seq[Int]](range, Seq(finishState))
+        1
+      }
+      case CustomSingleAlternation(pred) => {
+        buf += new IntCustomMap(pred, Seq(finishState))
         1
       }
       case EnumeratedAlternation(es) => {
@@ -71,7 +79,7 @@ private[lexer] object NFA {
         1
       }
       case Regex.Wildcard => {
-        buf += new NumericConstantMap(0 until ASCII_SIZE, Seq(finishState))
+        buf += new IntRangeConstantMap(UnicodeRange, Seq(finishState))
         1
       }
     }

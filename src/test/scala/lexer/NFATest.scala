@@ -3,7 +3,7 @@ package lexer
 
 import common.Token
 import lexer.NFATest.{TestToken, transit}
-import lexer.Regex.stringToRegexFuncs
+import lexer.Regex.{characterClass, customCharacterClass, stringToRegexFuncs}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -16,14 +16,22 @@ class NFATest extends AnyFunSuite {
     nfaCheck("hello")("hello")("", "bye", "hello!!")
   }
 
-  //noinspection SpellCheckingInspection
-  test("EnumeratedAlternation") {
-    nfaCheck("red" | "black" | "white")("red", "black", "white")("yellow", "re", "blackblack")
-    nfaCheck("red".opt)("", "red")("yellow", "re", "redred")
+  test("CharacterClassAlternation") {
+    nfaCheck(characterClass("and"))("a", "n", "d")("", "k", "an", "ad", "and")
   }
 
   test("RangeAlternation") {
     nfaCheck('a' to 'd')("a", "b", "c", "d")("e", "f", "", "abc")
+  }
+
+  test("CustomSingleAlternation") {
+    nfaCheck(customCharacterClass({ _ % 2 == 0 }))(" ", "4", "N")("  ", "", "!")
+  }
+
+  //noinspection SpellCheckingInspection
+  test("EnumeratedAlternation") {
+    nfaCheck("red" | "black" | "white")("red", "black", "white")("yellow", "re", "blackblack")
+    nfaCheck("red".opt)("", "red")("yellow", "re", "redred")
   }
 
   //noinspection SpellCheckingInspection

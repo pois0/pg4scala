@@ -1,8 +1,8 @@
 package jp.pois.pg4scala
 package utils
 
-private[pg4scala] class NumericConstantMap[+V](private val range: Range, private val value: V) extends Map[Int, V] {
-  override def +[V1 >: V](kv: (Int, V1)): Map[Int, V1] = Map(kv) ++ this
+private[pg4scala] class IntRangeConstantMap[+V](private val range: Range, private val value: V) extends Map[Int, V] {
+  override def +[V1 >: V](kv: (Int, V1)): Map[Int, V1] = Map(this.iterator.toSeq: _*) + kv
 
   override def get(key: Int): Option[V] = if (range.contains(key)) Some(value) else None
 
