@@ -3,15 +3,15 @@ package parser
 
 import common.Token
 
-sealed abstract class Term
+sealed abstract class Character
 
-object Term {
+object Character {
   import scala.language.implicitConversions
   import scala.reflect.ClassTag
 
   type TokenType = Class[_]
 
-  case class Terminal(clazz: TokenType) extends Term {
+  case class Terminal(clazz: TokenType) extends Character {
     def check(token: Token): Boolean = clazz.isInstance(token)
 
     override def equals(obj: Any): Boolean = obj match {
@@ -20,7 +20,7 @@ object Term {
     }
   }
 
-  case class NonTerminal(symbol: NonTerminalSymbol) extends Term
+  case class NonTerminal(symbol: NonTerminalSymbol) extends Character
 
   object Terminal {
     def apply[A <: Token](implicit tag: ClassTag[A]): Terminal = new Terminal(tag.runtimeClass)
@@ -32,6 +32,6 @@ object Term {
     private object SharpToken extends Token
   }
 
-  implicit def tokenToTerm(token: Token): Term = new Terminal(token.getClass)
-  implicit def nonTerminalSymbolToTerm(symbol: NonTerminalSymbol): Term = NonTerminal(symbol)
+  implicit def tokenToTerm(token: Token): Character = new Terminal(token.getClass)
+  implicit def nonTerminalSymbolToTerm(symbol: NonTerminalSymbol): Character = NonTerminal(symbol)
 }
