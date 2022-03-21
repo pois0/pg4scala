@@ -5,7 +5,7 @@ import common.Token
 import common.Token.EOF
 import lexer.LexerTest._
 import lexer.MatchedContext.CharPosition
-import lexer.Regex.CharacterClass
+import lexer.Regex.{CharacterClass, Wildcard, not}
 import lexer.Regex.CharacterClass.{Alphabet, Word}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -79,6 +79,30 @@ ifier
       .build
 
     checkString(rule)("if8")(Identifier("if8"), EOF)
+  }
+
+  test("Test UTF-8") {
+    val rule = Lexer.builder
+      .ignore(' ', '\n', '\t')
+      .rule("function", { c => FunctionTokenWithPos(c.start, c.end) })
+      .rule(not(' ', '\n', '\t').rep1, { c => IdentifierWithPos(c.matchedString, c.start, c.end) })
+      .build
+
+    checkString(rule)(
+      """ident
+識別子 識別子🥺 test function
+ident2 function
+"""
+    )(
+      IdentifierWithPos("ident", CharPosition(0, 0, 0), CharPosition(0, 5, 5)),
+      IdentifierWithPos("識別子", CharPosition(1, 0, 6), CharPosition(1, 3, 9)),
+      IdentifierWithPos("識別子\uD83E\uDD7A", CharPosition(1, 4, 10), CharPosition(1, 8, 14)),
+      IdentifierWithPos("test", CharPosition(1, 9, 15), CharPosition(1, 13, 19)),
+      FunctionTokenWithPos(CharPosition(1, 14, 20), CharPosition(1, 22, 28)),
+      IdentifierWithPos("ident2", CharPosition(2, 0, 29), CharPosition(2, 6, 35)),
+      FunctionTokenWithPos(CharPosition(2, 7, 36), CharPosition(2, 15, 44)),
+      EOF
+    )
   }
 
   def checkString(lexer: Lexer)(str: String)(expected: Token*): Unit = {

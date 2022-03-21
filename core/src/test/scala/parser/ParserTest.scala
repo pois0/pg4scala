@@ -44,6 +44,7 @@ class ParserTest extends AnyFunSuite {
   }
 }
 
+//noinspection TypeAnnotation
 object ParserTest {
   val S = NonTerminalSymbol("S")
   val L = NonTerminalSymbol("L")

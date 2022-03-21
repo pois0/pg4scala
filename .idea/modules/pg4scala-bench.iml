@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module external.linked.project.id="Benchmark [file:/home/pois/Programs/pg4scala/]" external.linked.project.path="$MODULE_DIR$/../../bench" external.root.project.path="$MODULE_DIR$/../.." external.system.id="SBT" type="JAVA_MODULE" version="4">
+  <component name="NewModuleRootManager" LANGUAGE_LEVEL="JDK_11">
+    <output url="file://$MODULE_DIR$/../../bench/target/scala-2.12/classes" />
+    <output-test url="file://$MODULE_DIR$/../../bench/target/scala-2.12/test-classes" />
+    <exclude-output />
+    <content url="file://$MODULE_DIR$/../../bench">
+      <sourceFolder url="file://$MODULE_DIR$/../../bench/src/main/resources" type="java-test-resource" />
+      <sourceFolder url="file://$MODULE_DIR$/../../bench/src/main/scala" isTestSource="false" packagePrefix="jp.pois.pg4scala" />
+      <sourceFolder url="file://$MODULE_DIR$/../../bench/target/scala-2.12/resource_managed/jmh" type="java-test-resource" />
+      <sourceFolder url="file://$MODULE_DIR$/../../bench/target/scala-2.12/src_managed/jmh" isTestSource="true" generated="true" />
+      <excludeFolder url="file://$MODULE_DIR$/../../bench/target/streams" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="module" module-name="pg4scala-core" exported="" />
+    <orderEntry type="library" name="sbt: com.typesafe.scala-logging:scala-logging_2.12:3.9.4:jar" level="project" />
+    <orderEntry type="library" name="sbt: net.sf.jopt-simple:jopt-simple:4.6:jar" level="project" />
+    <orderEntry type="library" name="sbt: org.apache.commons:commons-math3:3.2:jar" level="project" />
+    <orderEntry type="library" name="sbt: org.openjdk.jmh:jmh-core:1.32:jar" level="project" />
+    <orderEntry type="library" name="sbt: org.openjdk.jmh:jmh-generator-asm:1.32:jar" level="project" />
+    <orderEntry type="library" name="sbt: org.openjdk.jmh:jmh-generator-bytecode:1.32:jar" level="project" />
+    <orderEntry type="library" name="sbt: org.openjdk.jmh:jmh-generator-reflection:1.32:jar" level="project" />
+    <orderEntry type="library" name="sbt: org.ow2.asm:asm:9.0:jar" level="project" />
+    <orderEntry type="library" name="sbt: org.scala-lang:scala-library:2.12.13:jar" level="project" />
+    <orderEntry type="library" name="sbt: org.scala-lang:scala-reflect:2.12.13:jar" level="project" />
+    <orderEntry type="library" name="sbt: org.slf4j:slf4j-api:1.7.30:jar" level="project" />
+  </component>
+</module>

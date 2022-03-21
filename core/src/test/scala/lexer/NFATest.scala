@@ -3,13 +3,16 @@ package lexer
 
 import common.Token
 import lexer.NFATest.{TestToken, transit}
-import lexer.Regex.{characterClass, customCharacterClass, stringToRegexFuncs}
+import lexer.Regex.{CharacterClass, characterClass, not, notInt, stringToRegexFuncs}
 
 import org.scalatest.funsuite.AnyFunSuite
+
+import java.nio.charset.StandardCharsets
 
 class NFATest extends AnyFunSuite {
   test("Symbol") {
     nfaCheck('a')("a")("b", "", "af")
+    nfaCheck('あ')("あ")("a", " ")
   }
 
   test("Concatenate") {
@@ -24,8 +27,8 @@ class NFATest extends AnyFunSuite {
     nfaCheck('a' to 'd')("a", "b", "c", "d")("e", "f", "", "abc")
   }
 
-  test("CustomSingleAlternation") {
-    nfaCheck(customCharacterClass({ _ % 2 == 0 }))(" ", "4", "N")("  ", "", "!")
+  test("Not") {
+    nfaCheck(not('a'))("b", "f", "\u0080", "\u0800", "\uD800\uDC00")("a", "", "bf")
   }
 
   //noinspection SpellCheckingInspection
@@ -38,10 +41,24 @@ class NFATest extends AnyFunSuite {
   test("Repetition") {
     nfaCheck("hello".rep0)("", "hello", "hellohello", "hellohellohellohello")("he", "hellohe", "ho")
     nfaCheck("hello".rep1)("hello", "hellohello", "hellohellohellohello")("", "he", "hellohe", "ho")
+    nfaCheck("hello" repN 5)("hellohellohellohellohello", "hellohellohellohellohellohellohello")("", "hello", "hellohe")
   }
 
   test("Epsilon") {
     nfaCheck(Regex.epsilon)("")("a", "100")
+  }
+
+  test("wildcard") {
+    nfaCheck(Regex.wildcard)("a", "1", " ", "\u0080", "\u0800", "\uD800\uDC00")("", "hello")
+  }
+
+  test("predefined regexes") {
+    nfaCheck(CharacterClass.WhiteSpace)(" ", "\t", "\n", "\u000B", "\f", "\r")("", "a", "  ", "あ")
+    nfaCheck(CharacterClass.Digit)((0 to 9).map { _.toString }:_*)("", "a", "/", ":", "あ")
+    nfaCheck(CharacterClass.UpperAlphabet)(('A' to 'Z').map { _.toString }:_*)()
+    nfaCheck(CharacterClass.LowerAlphabet)(('a' to 'z').map { _.toString }:_*)()
+    nfaCheck(CharacterClass.Alphabet)()()
+    nfaCheck(CharacterClass.Word)()()
   }
 
   private def nfaCheck(regex: Regex)(shouldBeAccepted: String*)(shouldBeRejected: String*): Unit = {
@@ -68,7 +85,7 @@ object NFATest {
   private object TestToken extends Token
 
   private def transit(nfa: NFA, string: String): Set[Int] =
-    string.foldLeft(Set(nfa.initialState)) { (states, c) =>
-      states.flatMap { s => nfa.table(s).getOrElse(c.toInt, Set.empty) }
+    string.getBytes(StandardCharsets.UTF_8).foldLeft(Set(nfa.initialState)) { (states, c) =>
+      states.flatMap { s => nfa.table(s).getOrElse(c & 0xff, Set.empty) }
     }
 }

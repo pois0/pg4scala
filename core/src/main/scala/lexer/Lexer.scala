@@ -9,19 +9,22 @@ import lexer.MatchedContext.CharPosition
 import lexer.Regex.Alternation.EnumeratedAlternation
 import lexer.exceptions.MismatchedCharException
 
-import java.io.Reader
+import java.io.{ByteArrayOutputStream, Reader, UnsupportedEncodingException}
+import java.nio.charset.StandardCharsets
 import scala.collection.mutable.ArrayBuffer
 
 final class Lexer private[Lexer](private val dfa: DFA) {
   def lex(reader: Reader): Stream[Token] = new Stepper(reader).loop(DFA.State.initialState).filterNot { _ eq Skip }
 
   private class Stepper(private val reader: Reader) {
-    private val strBuf = StringBuilder.newBuilder
+    private val strBuf = new ByteArrayOutputStream()
     private var currentIndex = 0
     private var currentRow = 0
     private var currentColumn = 0
     private var broken = false
     private var startAt = CharPosition(currentRow, currentColumn, currentIndex)
+    private val buf = new Array[Int](3)
+    private var bufIndex = -1
 
     def loop(state: State, char: Int = read()): Stream[Token] = {
       var currentState = state
@@ -48,13 +51,47 @@ final class Lexer private[Lexer](private val dfa: DFA) {
       }
     }
 
-    @inline private def read() = reader.read()
+    private def read(): Int = {
+      val index = bufIndex
+      if (index < 0) {
+        val c = reader.read()
+
+        if (c < 0x80) {
+          c
+        } else if (c < 0x800) {
+          bufIndex = 0
+          buf(0) = 0x80 | (c & 0x3f)
+          0xc0 | (c >> 6)
+        } else if (0xd800 <= c && c < 0xdc00) {
+          val hi = c
+          val lo = reader.read()
+          val c32 = 0x10000 + (hi - 0xd800) * 0x400 + (lo - 0xdc00)
+          bufIndex = 2
+          buf(2) = 0x80 | ((c32 >> 12) & 0x3f)
+          buf(1) = 0x80 | ((c32 >> 6) & 0x3f)
+          buf(0) = 0x80 | (c32 & 0x3f)
+          0xf0 | (c >> 18)
+        } else if (c < 0x10000) {
+          bufIndex = 1
+          buf(1) = 0x80 | ((c >> 6) & 0x3f)
+          buf(0) = 0x80 | (c & 0x3f)
+          0xe0 | (c >> 12)
+        } else {
+          throw new UnsupportedEncodingException
+        }
+      } else {
+        bufIndex = index - 1
+        buf(index)
+      }
+    }
 
     @inline private def pushAndRead(prev: Int) = {
-      strBuf.append(prev.toChar)
+      strBuf.write(prev)
+      if (bufIndex < 0) {
+        currentIndex += 1
+        currentColumn += 1
+      }
       val c = read()
-      currentIndex += 1
-      currentColumn += 1
       if (broken) handleLineBreak()
       if (isBreakChar(c)) broken = true
       c
@@ -65,7 +102,7 @@ final class Lexer private[Lexer](private val dfa: DFA) {
       currentColumn += 1
     }
 
-    private def handleLineBreak(): Unit = {
+    @inline private def handleLineBreak(): Unit = {
       currentRow += 1
       currentColumn = -1
       broken = false
@@ -76,12 +113,12 @@ final class Lexer private[Lexer](private val dfa: DFA) {
     private def reset(): MatchedContext = {
       val startAtTmp = startAt
       val current = currentCharPosition
-      val matchedString = strBuf.result
+      val matchedString = strBuf.toString(StandardCharsets.UTF_8)
       startAt = if (broken) {
         handleLineBreak()
         currentCharPosition
       } else current
-      strBuf.clear
+      strBuf.reset()
       MatchedContext(matchedString, startAtTmp, current)
     }
   }
@@ -110,7 +147,7 @@ object Lexer {
     }
 
     def ignore(regexes: Regex*): LexerBuilder = {
-      rules += Tuple2(EnumeratedAlternation(regexes.toArray), skipGenerator)
+      rules += Tuple2(EnumeratedAlternation(regexes.toSeq), skipGenerator)
       this
     }
   }

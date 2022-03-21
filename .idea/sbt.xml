@@ -9,11 +9,13 @@
         <option name="modules">
           <set>
             <option value="$PROJECT_DIR$" />
+            <option value="$PROJECT_DIR$/bench" />
+            <option value="$PROJECT_DIR$/core" />
             <option value="$PROJECT_DIR$/project" />
           </set>
         </option>
-        <option name="sbtVersion" value="1.5.8" />
       </SbtProjectSettings>
     </option>
+    <option name="vmParameters" value="-XX:-OmitStackTraceInFastThrow" />
   </component>
 </project>

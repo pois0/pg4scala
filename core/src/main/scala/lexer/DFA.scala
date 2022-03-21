@@ -53,7 +53,8 @@ object DFA {
       }
     }
 
-    new DFA(transitTable.toArray, resultMap.toMap)
+    val dfa = new DFA(transitTable.toArray, resultMap.toMap)
+    dfa
   }
 
   sealed abstract class TransitionResult

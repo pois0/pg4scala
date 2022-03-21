@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ScalaCompilerConfiguration">
-    <profile name="sbt 1" modules="pg4scala" />
+    <profile name="sbt 1" modules="Root,pg4scala,pg4scala-bench,pg4scala-core" />
   </component>
 </project>
