@@ -19,7 +19,7 @@ class LexerBenchmark {
   def setup(): Unit = {
     lexer = JsonToken.jsonLexerBuilder.build
 
-    val source = Source.fromResource("test-data/large-file.json")
+    val source = Source.fromResource("large.json")
     jsonString = try source.mkString finally source.close()
   }
 

@@ -1,3 +1,0 @@
-[submodule "bench/src/main/resources/test-data"]
-	path = bench/src/main/resources/test-data
-	url = https://github.com/json-iterator/test-data.git
