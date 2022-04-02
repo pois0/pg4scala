@@ -17,9 +17,9 @@ class ParserTest extends AnyFunSuite {
       .rule(L, Array(L, Comma, S), { seq => Value.Cons(seq(0).asValue.asInstanceOf[Value.List], seq(2).asValue) })
       .build
 
-    testParse(rule, Tokens.Id #:: common.Token.EOF #:: Stream.Empty, Value.Id)
-    testParse(rule, LParen #:: Tokens.Id #:: RParen #:: common.Token.EOF #:: Stream.Empty, Value.Cons(Value.Empty, Value.Id))
-    testParse(rule, LParen #:: LParen #:: Tokens.Id #:: Comma #:: Tokens.Id #:: RParen #:: RParen #:: common.Token.EOF #:: Stream.Empty, Value.Cons(Value.Empty, Value.Cons(Value.Cons(Value.Empty, Value.Id), Value.Id)))
+    testParse(rule, Tokens.Id #:: common.Token.EOF #:: LazyList.empty, Value.Id)
+    testParse(rule, LParen #:: Tokens.Id #:: RParen #:: common.Token.EOF #:: LazyList.empty, Value.Cons(Value.Empty, Value.Id))
+    testParse(rule, LParen #:: LParen #:: Tokens.Id #:: Comma #:: Tokens.Id #:: RParen #:: RParen #:: common.Token.EOF #:: LazyList.empty, Value.Cons(Value.Empty, Value.Cons(Value.Cons(Value.Empty, Value.Id), Value.Id)))
   }
 
   // The rule is quoted from "Compilers: Principles, Techniques, and Tools (Second Edition)" (A. Aho, et al.)
@@ -32,13 +32,13 @@ class ParserTest extends AnyFunSuite {
       .rule(R, Array(L), { seq => seq(0).asValue })
       .build
 
-    testParse(rule, Tokens.Id #:: common.Token.EOF #:: Stream.Empty, Value.Id)
-    testParse(rule, Tokens.Star #:: Tokens.Id #:: common.Token.EOF #:: Stream.Empty, Unary(Value.Id))
-    testParse(rule, Tokens.Id #:: Equal #:: Tokens.Id #:: common.Token.EOF #:: Stream.Empty, Equals(Value.Id, Value.Id))
-    testParse(rule, Tokens.Star #:: Tokens.Star #:: Tokens.Star #:: Tokens.Id #:: common.Token.EOF #:: Stream.Empty, Unary(Unary(Unary(Value.Id))))
+    testParse(rule, Tokens.Id #:: common.Token.EOF #:: LazyList.empty, Value.Id)
+    testParse(rule, Tokens.Star #:: Tokens.Id #:: common.Token.EOF #:: LazyList.empty, Unary(Value.Id))
+    testParse(rule, Tokens.Id #:: Equal #:: Tokens.Id #:: common.Token.EOF #:: LazyList.empty, Equals(Value.Id, Value.Id))
+    testParse(rule, Tokens.Star #:: Tokens.Star #:: Tokens.Star #:: Tokens.Id #:: common.Token.EOF #:: LazyList.empty, Unary(Unary(Unary(Value.Id))))
   }
 
-  private def testParse[Value](parser: Parser[Value], tokens: Stream[common.Token], expected: Value) = {
+  private def testParse[Value](parser: Parser[Value], tokens: LazyList[common.Token], expected: Value) = {
     val actual = parser.parse(tokens)
     assert(expected == actual)
   }

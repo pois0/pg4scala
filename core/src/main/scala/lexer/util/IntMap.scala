@@ -4,11 +4,11 @@ package lexer.util
 import utils.Character.ByteRange
 
 private[lexer] trait IntMap[+V] extends Map[Int, V] {
-  override def +[V1 >: V](kv: (Int, V1)): Map[Int, V1] = toGeneralMap + kv
+  override def updated[V1 >: V](key: Int, value: V1): Map[Int, V1] = toGeneralMap.updated(key, value)
 
   override def iterator: Iterator[(Int, V)] = domain.flatMap { e => get(e).map { v => (e, v) } }
 
-  override def -(key: Int): Map[Int, V] = toGeneralMap - key
+  override def removed(key: Int): Map[Int, V] = toGeneralMap - key
 
   protected def domain: Iterator[Int] = ByteRange.iterator
 

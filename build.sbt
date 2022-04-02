@@ -13,7 +13,7 @@ val CommonSettings = Seq(
   developers := List(
     Developer(id="pois0", name="Shusuke Takahashi", email="dev@pois.jp", url=url("https://github.com/pois0"))
   ),
-  scalaVersion := "2.12.13",
+  scalaVersion := "2.13.8",
   idePackagePrefix := Some("jp.pois.pg4scala"),
 
   githubOwner := "pois0",

@@ -2,7 +2,7 @@ package jp.pois.pg4scala
 package lexer.util
 
 private[lexer] trait GeneralArrayMap[+V] extends IntMap[V] {
-  protected val domainSeq: Seq[Int]
+  protected val domainSeq: collection.Seq[Int]
 
   protected def exists(key: Int): Int = {
     var l = -1

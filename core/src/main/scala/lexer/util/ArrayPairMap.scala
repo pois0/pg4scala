@@ -1,7 +1,7 @@
 package jp.pois.pg4scala
 package lexer.util
 
-private[lexer] class ArrayPairMap[+V](override val domainSeq: Seq[Int], private val range: Seq[V]) extends IntMap[V] with GeneralArrayMap[V] {
+private[lexer] class ArrayPairMap[+V](override val domainSeq: collection.Seq[Int], private val range: collection.Seq[V]) extends IntMap[V] with GeneralArrayMap[V] {
   override def iterator: Iterator[(Int, V)] = domainSeq.iterator.zip(range.iterator)
 
   override def get(key: Int): Option[V] = {

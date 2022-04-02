@@ -14,7 +14,7 @@ import java.nio.charset.StandardCharsets
 import scala.collection.mutable.ArrayBuffer
 
 final class Lexer private[Lexer](private val dfa: DFA) {
-  def lex(reader: Reader): Stream[Token] = new Stepper(reader).loop(DFA.State.initialState).filterNot { _ eq Skip }
+  def lex(reader: Reader): LazyList[Token] = new Stepper(reader).loop(DFA.State.initialState).filterNot { _ eq Skip }
 
   private class Stepper(private val reader: Reader) {
     private val strBuf = new ByteArrayOutputStream()
@@ -26,7 +26,7 @@ final class Lexer private[Lexer](private val dfa: DFA) {
     private val buf = new Array[Int](3)
     private var bufIndex = -1
 
-    def loop(state: State, char: Int = read()): Stream[Token] = {
+    def loop(state: State, char: Int = read()): LazyList[Token] = {
       var currentState = state
       var c = char
 
@@ -44,7 +44,7 @@ final class Lexer private[Lexer](private val dfa: DFA) {
       dfa.currentResult(currentState) match {
         case TransitionResult.Accepted(tokenGen) => {
           shift()
-          tokenGen(reset()) #:: EOF #:: Stream.empty
+          tokenGen(reset()) #:: EOF #:: LazyList.empty
         }
         case TransitionResult.Rejected => throw new MismatchedCharException
         case TransitionResult.OnGoing(_) => throw new UnsupportedOperationException
@@ -134,7 +134,7 @@ object Lexer {
   class LexerBuilder private[Lexer]() {
     private val rules = new ArrayBuffer[(Regex, TokenGenerator)]
 
-    def build: Lexer = new Lexer(DFA.fromNFA(NFA.fromRegexes(rules: _*)))
+    def build: Lexer = new Lexer(DFA.fromNFA(NFA.fromRegexes(rules.toSeq: _*)))
 
     def rule(regex: Regex, token: Token): LexerBuilder = {
       rules += Tuple2(regex, { _ => token})

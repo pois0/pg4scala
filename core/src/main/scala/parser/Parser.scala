@@ -21,7 +21,7 @@ final class Parser[Value] private(
   private val termMap: Array[Map[Class[_], AnalyseResult[Value]]],
   private val nonTermMap: Array[Map[NonTerminalSymbol, Int]]
 ) extends LazyLogging {
-  def parse(tokens: Stream[common.Token]): Value = tokens.flatMap((new Stepper).step).headOption match {
+  def parse(tokens: LazyList[common.Token]): Value = tokens.flatMap((new Stepper).step).headOption match {
     case Some(value) => value
     case None => throw new IllegalArgumentException("The input is illegal.")
   }

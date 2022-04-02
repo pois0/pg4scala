@@ -12,13 +12,13 @@ import scala.collection.mutable.ArrayBuffer
 private[lexer] final case class NFA(table: mutable.Buffer[Transit], initialState: Int, resultMap: Map[Int, TokenGenerator], resultOrder: Map[TokenGenerator, Int])
 
 private[lexer] object NFA {
-  type Transit = Map[Int, Seq[Int]]
+  type Transit = Map[Int, collection.Seq[Int]]
 
   val epsilon: Int = -1
 
   def fromRegexes(regexes: (Regex, TokenGenerator)*): NFA = {
     val regSize = regexes.size
-    val buf = new ArrayBuffer[Map[Int, Seq[Int]]](regSize * 2 + 1)
+    val buf = new ArrayBuffer[Map[Int, collection.Seq[Int]]](regSize * 2 + 1)
     for (_ <- regexes.indices) buf += Map.empty
     val arr = regexes.zipWithIndex.map { case ((_, gen), i) => i -> gen }.toMap
 
@@ -123,7 +123,7 @@ private[lexer] object NFA {
             } else {
               rootDomainBuf += prev1
               rootRangeBuf += Seq(offset)
-              buf += new ArrayMap(secDomainBuf, fs)
+              buf += new ArrayMap(secDomainBuf.toArray, fs)
 
               offset += 1
               secDomainBuf = new ArrayBuffer
