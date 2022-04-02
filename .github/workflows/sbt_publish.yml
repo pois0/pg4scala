@@ -32,4 +32,4 @@ jobs:
       env:
         PG4SCALA_VERSION: ${{ steps.get_version.outputs.VERSION }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: sbt publish
+      run: sbt Core/publish
