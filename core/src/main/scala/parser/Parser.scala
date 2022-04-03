@@ -3,7 +3,7 @@ package parser
 
 import parser.Character.Terminal.{EOF, EOFType, Sharp, SharpClass}
 import parser.Character.{NonTerminal, Terminal, TokenType}
-import parser.NonTerminalSymbol.TopInitialSymbol
+import parser.NonTerminalSymbol.{InnerSymbol, TopInitialSymbol}
 import parser.Parser.AnalyseResult.{Accept, Reduce, Shift}
 import parser.Parser.ParserBuilder.{LR0StateItem, LR1StateItem}
 import parser.Parser.ParserStackElement.Bottom
@@ -35,7 +35,8 @@ final class Parser[Value] private(
       case Some(res) => res match {
         case AnalyseResult.Accept => stack.pop().term match {
           case ParsedValue(_, value) => Some(value)
-          case Token(_) => throw new IllegalStateException("The stack of the parser is broken so it failed to parse the input.")
+          case Token(_) =>
+            throw new IllegalStateException("The stack of the parser is broken so it failed to parse the input.")
         }
         case AnalyseResult.Shift(goto) => {
           logger.debug(s"Shift / Token: $token, current: $currentState, goto: $goto")
@@ -65,12 +66,13 @@ final class Parser[Value] private(
 }
 
 object Parser {
-  type ResultGenerator[Value] = Seq[ParseResult[Value]] => Value
+  type RGParam[+From] = Seq[ParseResult[From]]
+  type ResultGenerator[From, +To] = RGParam[From] => To
 
   def builder[Value](initialTerm: NonTerminalSymbol): ParserBuilder[Value] = new ParserBuilder(initialTerm)
 
   final class ParserBuilder[Value] private[Parser](private val initialTerm: NonTerminalSymbol) extends LazyLogging {
-    private val grammar = mutable.Map.empty[NonTerminalSymbol, ArrayBuffer[(Array[Character], ResultGenerator[Value])]]
+    private val grammar = mutable.Map.empty[NonTerminalSymbol, ArrayBuffer[(Seq[Character], ResultGenerator[Value, Value])]]
     private val first = mutable.Map[Character, mutable.Set[TokenType]]()
     private val nullable = mutable.Set[NonTerminalSymbol]()
     type LR0StateItem = ParserBuilder.LR0StateItem[Value]
@@ -78,21 +80,107 @@ object Parser {
     type LR0ItemSet = mutable.Set[LR0StateItem]
     type LR1ItemSet = mutable.Set[LR1StateItem]
 
-    private lazy val initialItem: LR0StateItem = LR0StateItem(TopInitialSymbol, Array(Character.NonTerminal(initialTerm)), 0, lastReduceRule)
+    private lazy val initialItem: LR0StateItem =
+      LR0StateItem(TopInitialSymbol, Array(Character.NonTerminal(initialTerm)), 0, lastReduceRule)
     private lazy val initialState = lr0closure(mutable.Set(initialItem))
 
-    def rule(left: NonTerminalSymbol, right: Array[Character], mapToValue: ResultGenerator[Value]): ParserBuilder[Value] = {
+    def rule(left: NonTerminalSymbol, right: Seq[Character], mapToValue: ResultGenerator[Value, Value]): ParserBuilder[Value] = {
       val tup = Tuple2(right, mapToValue)
       grammar.getOrElseUpdate(left, ArrayBuffer.empty) += tup
       if (right.isEmpty) nullable += left
       for (c <- right) {
         c match {
-          case Terminal(tokenType) => first.getOrElseUpdate(c, { mutable.Set(tokenType) })
+          case Terminal(tokenType) => first.getOrElseUpdate(c, {
+            mutable.Set(tokenType)
+          })
           case NonTerminal(_) =>
         }
       }
 
       this
+    }
+
+    def ruleOpt[Elem <: Value](
+      left: NonTerminalSymbol,
+      rightBase: Seq[Character],
+      mapToValue: ResultGenerator[Value, Elem],
+      mapOpt: Option[Elem] => Value
+    ): ParserBuilder[Value] = {
+      rule(left, Seq.empty, { _ => mapOpt(None) })
+      rule(left, rightBase, { seq => mapOpt(Some(mapToValue(seq))) })
+    }
+
+    def ruleRep1[Elem <: Value, VList <: Value](
+      left: NonTerminalSymbol,
+      rightBase: Seq[Character],
+      mapToValue: ResultGenerator[Value, Elem],
+      cons: (Elem, VList) => VList,
+      base: VList
+    ): ParserBuilder[Value] = {
+      val innerLeft = InnerSymbol(left)
+      rule(left, Seq(innerLeft), { res => cons(res(0).asValue.asInstanceOf[Elem], base) })
+      rule(left, Seq(left, innerLeft), { res => cons(res(1).asValue.asInstanceOf[Elem], res(0).asValue.asInstanceOf[VList]) })
+      rule(innerLeft, rightBase, mapToValue)
+    }
+
+    def ruleRep1[Elem <: Value, VList <: Value](
+      left: NonTerminalSymbol,
+      rightBase: Seq[Character],
+      sep: Seq[Character],
+      mapToValue: ResultGenerator[Value, Elem],
+      cons: (Elem, VList) => VList,
+      base: VList
+    ): ParserBuilder[Value] = {
+      val innerLeft = InnerSymbol(left)
+
+      val repRight = new Array[Character](sep.length + 2)
+      repRight(0) = left
+      sep.copyToArray(repRight, 1)
+      repRight(sep.length + 1) = innerLeft
+
+      rule(left, Seq(innerLeft), { res => cons(res(0).asValue.asInstanceOf[Elem], base) })
+      rule(left, repRight, { res => cons(res.last.asValue.asInstanceOf[Elem], res(0).asValue.asInstanceOf[VList]) })
+      rule(innerLeft, rightBase, mapToValue)
+    }
+
+    def ruleRep0[Elem <: Value, VList <: Value](
+      left: NonTerminalSymbol,
+      rightBase: Seq[Character],
+      mapToValue: ResultGenerator[Value, Elem],
+      cons: (Elem, VList) => VList,
+      base: VList
+    ): ParserBuilder[Value] = {
+      val optLeft = InnerSymbol(left)
+      val repLeft = InnerSymbol(optLeft)
+
+      rule(left, Seq.empty, { _ => base })
+      rule(left, Seq(optLeft), { _ (0).asValue })
+      rule(optLeft, Seq(repLeft), { res => cons(res(0).asValue.asInstanceOf[Elem], base) })
+      rule(optLeft, Seq(optLeft, repLeft), { res => cons(res(1).asValue.asInstanceOf[Elem], res(0).asValue.asInstanceOf[VList]) })
+      rule(repLeft, rightBase, mapToValue)
+    }
+
+    def ruleRep0[Elem <: Value, VList <: Value](
+      left: NonTerminalSymbol,
+      rightBase: Seq[Character],
+      sep: Seq[Character],
+      mapToValue: ResultGenerator[Value, Elem],
+      cons: (Elem, VList) => VList,
+      base: VList
+    ): ParserBuilder[Value] = {
+      val optLeft = InnerSymbol(left)
+      val repLeft = InnerSymbol(optLeft)
+
+      val repRight = new Array[Character](sep.length + 2)
+      repRight(0) = optLeft
+      sep.copyToArray(repRight, 1)
+      repRight(sep.length + 1) = repLeft
+
+      rule(left, Seq.empty, { _ => base })
+      rule(left, Seq(optLeft), {_ (0).asValue})
+      rule(optLeft, Seq(repLeft), { res => cons(res(0).asValue.asInstanceOf[Elem], base) })
+      rule(optLeft, repRight, { res => cons(res.last.asValue.asInstanceOf[Elem], res(0).asValue.asInstanceOf[VList]) })
+      rule(repLeft, rightBase, mapToValue)
     }
 
     def build: Parser[Value] = {
@@ -105,7 +193,7 @@ object Parser {
 
     private def constructFirstAndNull(): Unit = {
       var flag = true
-      while(flag) {
+      while (flag) {
         flag = false
         for ((left, rightList) <- grammar) {
           val leftTerm = NonTerminal(left)
@@ -164,7 +252,7 @@ object Parser {
 
     private def calcLR0Kernel(stateMap: mutable.Map[LR0ItemSet, Int]): Map[LR0ItemSet, Int] = {
       val result = Map.newBuilder[LR0ItemSet, Int]
-      for ((itemSet, state)<- stateMap) {
+      for ((itemSet, state) <- stateMap) {
         val key = itemSet.filter { case LR0StateItem(left, _, i, _) => i > 0 || left == TopInitialSymbol }
         result += key -> state
       }
@@ -377,9 +465,10 @@ object Parser {
   }
 
   private[parser] object ParserBuilder {
-    final case class LR0StateItem[Value](left: NonTerminalSymbol, right: Array[Character], dot: Int, generator: ResultGenerator[Value]) {
+    final case class LR0StateItem[Value](left: NonTerminalSymbol, right: Seq[Character], dot: Int, generator: ResultGenerator[Value, Value]) {
       @inline def isScanFinished: Boolean = dot == right.length
     }
+
     final case class LR1StateItem[Value](item: LR0StateItem[Value], lookahead: TokenType) {
       @inline def isScanFinished: Boolean = item.isScanFinished
     }
@@ -387,16 +476,20 @@ object Parser {
 
   sealed abstract class ParseResult[+Value] {
     def asToken: common.Token
+
     def asValue: Value
   }
 
   private[parser] object ParseResult {
     final case class Token[+Value] private[parser](token: common.Token) extends ParseResult[Value] {
       override def asToken: common.Token = token
+
       override def asValue: Value = throw new NotImplementedError("ParseResult.Value was expected, but this is ParseResult.Token")
     }
+
     final case class Value[+Value] private[parser](value: Value) extends ParseResult[Value] {
       override def asToken: common.Token = throw new NotImplementedError("ParseResult.Token was expected, but this is ParseResult.Value")
+
       override def asValue: Value = value
     }
   }
@@ -405,19 +498,24 @@ object Parser {
 
   private[parser] object AnalyseResult {
     case object Accept extends AnalyseResult[Any]
+
     final case class Shift(goto: Int) extends AnalyseResult[Any]
-    final case class Reduce[Value](symbol: NonTerminalSymbol, numberOfRight: Int, generator: ResultGenerator[Value]) extends AnalyseResult[Value]
+
+    final case class Reduce[Value](symbol: NonTerminalSymbol, numberOfRight: Int, generator: ResultGenerator[Value, Value]) extends AnalyseResult[Value]
   }
 
   private[parser] sealed abstract class ParserStackElement[+Value] {
     def term: ParserStackTerm[Value]
+
     def state: Int
   }
 
   private[parser] object ParserStackElement {
     final case class Element[Value](term: ParserStackTerm[Value], state: Int) extends ParserStackElement[Value]
+
     final case object Bottom extends ParserStackElement[Nothing] {
       override def term: ParserStackTerm[Nothing] = throw new IllegalStateException()
+
       override def state: Int = 0
     }
   }
@@ -430,6 +528,7 @@ object Parser {
     final case class Token[+Value] private[parser](token: common.Token) extends ParserStackTerm[Value] {
       override def toResult: ParseResult[Value] = ParseResult.Token(token)
     }
+
     final case class ParsedValue[+Value] private[parser](sym: NonTerminalSymbol, value: Value) extends ParserStackTerm[Value] {
       override def toResult: ParseResult[Value] = ParseResult.Value(value)
     }

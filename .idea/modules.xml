@@ -6,6 +6,7 @@
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/Root-build.iml" filepath="$PROJECT_DIR$/.idea/modules/Root-build.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/pg4scala-bench.iml" filepath="$PROJECT_DIR$/.idea/modules/pg4scala-bench.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/pg4scala-core.iml" filepath="$PROJECT_DIR$/.idea/modules/pg4scala-core.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/project.Root-build.iml" filepath="$PROJECT_DIR$/.idea/modules/project.Root-build.iml" />
     </modules>
   </component>
 </project>

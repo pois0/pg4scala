@@ -34,4 +34,6 @@ object Character {
 
   implicit def tokenToTerm(token: Token): Character = new Terminal(token.getClass)
   implicit def nonTerminalSymbolToTerm(symbol: NonTerminalSymbol): Character = NonTerminal(symbol)
+
+  def charSeq(chars: Character*): Seq[Character] = chars
 }

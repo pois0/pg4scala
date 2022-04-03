@@ -7,6 +7,6 @@ object NonTerminalSymbol {
   def apply(identifier: String): NonTerminalSymbol = StringSymbol(identifier)
 
   private[parser] final case class StringSymbol(identifier: String) extends NonTerminalSymbol
-  private[parser] final case class InnerSymbol(identifier: String, magic1: Int, magic2: Int) extends NonTerminalSymbol
+  private[parser] final case class InnerSymbol(identifier: NonTerminalSymbol) extends NonTerminalSymbol
   case object TopInitialSymbol extends NonTerminalSymbol
 }
