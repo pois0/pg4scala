@@ -3,6 +3,9 @@ package parser
 
 import common.Token
 
+import scala.collection.immutable.ArraySeq
+import scala.collection.mutable
+
 sealed abstract class Character
 
 object Character {
@@ -36,4 +39,6 @@ object Character {
   implicit def nonTerminalSymbolToTerm(symbol: NonTerminalSymbol): Character = NonTerminal(symbol)
 
   def charSeq(chars: Character*): Seq[Character] = chars
+  def tokenSeq(chars: Token*): Seq[Character] = chars.map(tokenToTerm)
+  def ntSeq(chars: NonTerminalSymbol*): Seq[Character] = chars.map(nonTerminalSymbolToTerm)
 }
