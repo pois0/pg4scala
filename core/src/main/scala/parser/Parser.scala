@@ -27,7 +27,7 @@ final class Parser[Value] private(
   }
 
   private final class Stepper {
-    private val stack = mutable.ArrayStack[ParserStackElement[Value]](Bottom)
+    private val stack = mutable.Stack[ParserStackElement[Value]](Bottom)
     private var currentState = 0
 
     @tailrec
@@ -135,6 +135,7 @@ object Parser {
 
       val repRight = new Array[Character](sep.length + 2)
       repRight(0) = left
+      //noinspection ScalaUnusedExpression
       sep.copyToArray(repRight, 1)
       repRight(sep.length + 1) = innerLeft
 
@@ -173,6 +174,7 @@ object Parser {
 
       val repRight = new Array[Character](sep.length + 2)
       repRight(0) = optLeft
+      //noinspection ScalaUnusedExpression
       sep.copyToArray(repRight, 1)
       repRight(sep.length + 1) = repLeft
 
@@ -228,7 +230,7 @@ object Parser {
 
     private def generateLR0State: (mutable.Map[LR0ItemSet, Int], Set[(Int, Int)]) = {
       val stateMap = mutable.Map(initialState -> 0)
-      val stack = mutable.ArrayStack((0, initialState))
+      val stack = mutable.Stack((0, initialState))
       val gotoTable = Set.newBuilder[(Int, Int)]
 
       while (stack.nonEmpty) {
@@ -263,7 +265,7 @@ object Parser {
       val termMap = ArrayBuffer.fill(states.size) { mutable.Map.empty[Class[_], AnalyseResult[Value]] }
       val nonTermMap = ArrayBuffer.fill(states.size) { mutable.Map.empty[NonTerminalSymbol, Int] }
 
-      val stack = new mutable.ArrayStack[(LR1ItemSet, Int)]
+      val stack = new mutable.Stack[(LR1ItemSet, Int)]
       stack ++= states
 
       while (stack.nonEmpty) {
@@ -323,7 +325,7 @@ object Parser {
     private def calcLALR1Kernel(kernels: Map[LR0ItemSet, Int], gotoTable: Set[(Int, Int)]): mutable.Map[LR1ItemSet, Int] = {
       type ItemAndState = (Int, LR0StateItem)
       val propagation = mutable.Map.empty[ItemAndState, mutable.Set[ItemAndState]]
-      val stack = mutable.ArrayStack(((0, initialItem), mutable.Set[TokenType](EOFType)))
+      val stack = mutable.Stack(((0, initialItem), mutable.Set[TokenType](EOFType)))
       val result = mutable.Map.empty[Int, mutable.Map[LR0StateItem, mutable.Set[TokenType]]]
 
       result.put(0, mutable.Map(
@@ -337,7 +339,7 @@ object Parser {
         kernels.collectFirst(unlift { case (items, sc) =>
           items.collectFirst(unlift { item =>
             val LR0StateItem(lc, rc, ric, _) = item
-            if (left == lc && (right sameElements rc) && (rightIndex + 1) == ric && gotoTable.contains(state -> sc)) {
+            if (left == lc && right == rc && (rightIndex + 1) == ric && gotoTable.contains(state -> sc)) {
               Some(item)
             } else {
               None
@@ -375,7 +377,7 @@ object Parser {
     }
 
     private def lr0closure(items: LR0ItemSet): LR0ItemSet = {
-      val stack = mutable.ArrayStack[LR0StateItem]()
+      val stack = mutable.Stack[LR0StateItem]()
       stack ++= items
 
       while (stack.nonEmpty) {
@@ -408,14 +410,14 @@ object Parser {
     }
 
     private def lr1closure(items: LR1ItemSet): LR1ItemSet = {
-      val stack = mutable.ArrayStack[LR1StateItem]()
+      val stack = mutable.Stack[LR1StateItem]()
       for (term <- items if !term.isScanFinished) stack += term
 
       while (stack.nonEmpty) {
         val LR1StateItem(LR0StateItem(_, right, currentIndex, _), la) = stack.pop()
         right(currentIndex) match {
           case Character.NonTerminal(tmp) => {
-            val follows = right.slice(currentIndex + 1, right.length).toSeq
+            val follows = right.slice(currentIndex + 1, right.length)
             grammar.getOrElse(tmp, Nil).foreach { case (tmpRight, generator) =>
               for (c <- firstOf(follows ++ Seq(Terminal(la)))) {
                 val candidate = LR1StateItem(LR0StateItem(tmp, tmpRight, 0, generator), c)
@@ -480,17 +482,23 @@ object Parser {
     def asValue: Value
   }
 
-  private[parser] object ParseResult {
-    final case class Token[+Value] private[parser](token: common.Token) extends ParseResult[Value] {
+  object ParseResult {
+    private[parser] final case class Token[+Value] private[parser](token: common.Token) extends ParseResult[Value] {
       override def asToken: common.Token = token
 
-      override def asValue: Value = throw new NotImplementedError("ParseResult.Value was expected, but this is ParseResult.Token")
+      override def asValue: Value = throw new IllegalStateException("ParseResult.Value was expected, but this is ParseResult.Token")
     }
 
-    final case class Value[+Value] private[parser](value: Value) extends ParseResult[Value] {
-      override def asToken: common.Token = throw new NotImplementedError("ParseResult.Token was expected, but this is ParseResult.Value")
+    private[parser] final case class Value[+Value] private[parser](value: Value) extends ParseResult[Value] {
+      override def asToken: common.Token = throw new IllegalStateException("ParseResult.Token was expected, but this is ParseResult.Value")
 
       override def asValue: Value = value
+    }
+
+    implicit final class ParseResultFunc[Value](private val result: ParseResult[Value]) extends AnyVal {
+      def asTokenOf[T <: common.Token]: T = result.asToken.asInstanceOf[T]
+
+      def asValueOf[T <: Value]: T = result.asValue.asInstanceOf[T]
     }
   }
 
@@ -525,8 +533,8 @@ object Parser {
   }
 
   private[parser] object ParserStackTerm {
-    final case class Token[+Value] private[parser](token: common.Token) extends ParserStackTerm[Value] {
-      override def toResult: ParseResult[Value] = ParseResult.Token(token)
+    final case class Token private[parser](token: common.Token) extends ParserStackTerm[Nothing] {
+      override def toResult: ParseResult[Nothing] = ParseResult.Token(token)
     }
 
     final case class ParsedValue[+Value] private[parser](sym: NonTerminalSymbol, value: Value) extends ParserStackTerm[Value] {
