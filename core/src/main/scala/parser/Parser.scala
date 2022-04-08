@@ -58,7 +58,7 @@ final class Parser[Value] private(
         }
       }
       case None => {
-        println(s"Error / Token: $token, current: $currentState, table: ${termMap(currentState)}")
+        logger.error(s"Token: $token, current: $currentState, table: ${termMap(currentState)}")
         throw new IllegalArgumentException("The input is illegal.")
       }
     }

@@ -31,7 +31,8 @@ lazy val Core = project.in(file("core"))
   .settings(
     name := "pg4scala-core",
     libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.11" % Test,
-    libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
+    libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4" % "compile",
+    libraryDependencies += "org.slf4j" % "slf4j-api" % "1.7.36" % "compile",
   )
 
 lazy val Benchmark = project.in(file("bench"))

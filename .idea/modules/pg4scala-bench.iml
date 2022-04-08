@@ -7,6 +7,8 @@
     <content url="file://$MODULE_DIR$/../../bench">
       <sourceFolder url="file://$MODULE_DIR$/../../bench/src/main/resources" type="java-test-resource" />
       <sourceFolder url="file://$MODULE_DIR$/../../bench/src/main/scala" isTestSource="false" packagePrefix="jp.pois.pg4scala" />
+      <sourceFolder url="file://$MODULE_DIR$/../../bench/target/scala-2.13/resource_managed/jmh" type="java-test-resource" />
+      <sourceFolder url="file://$MODULE_DIR$/../../bench/target/scala-2.13/src_managed/jmh" isTestSource="true" packagePrefix="jp.pois.pg4scala" generated="true" />
       <excludeFolder url="file://$MODULE_DIR$/../../bench/target/streams" />
       <excludeFolder url="file://$MODULE_DIR$/../../bench/target/scala-2.12" />
     </content>
@@ -23,6 +25,6 @@
     <orderEntry type="library" name="sbt: org.ow2.asm:asm:9.0:jar" level="project" />
     <orderEntry type="library" name="sbt: org.scala-lang:scala-library:2.13.8:jar" level="project" />
     <orderEntry type="library" name="sbt: org.scala-lang:scala-reflect:2.13.8:jar" level="project" />
-    <orderEntry type="library" name="sbt: org.slf4j:slf4j-api:1.7.30:jar" level="project" />
+    <orderEntry type="library" name="sbt: org.slf4j:slf4j-api:1.7.36:jar" level="project" />
   </component>
 </module>
