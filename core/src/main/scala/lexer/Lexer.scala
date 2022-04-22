@@ -37,7 +37,10 @@ final class Lexer private[Lexer](private val dfa: DFA) {
             c = pushAndRead(c)
           }
           case TransitionResult.Accepted(tokenGen) => return tokenGen(reset()) #:: loop(DFA.State.initialState, c)
-          case TransitionResult.Rejected => throw new MismatchedCharException
+          case TransitionResult.Rejected => {
+            val context = reset()
+            throw new MismatchedCharException(context.matchedString, context.start, context.end)
+          }
         }
       }
 
@@ -46,7 +49,10 @@ final class Lexer private[Lexer](private val dfa: DFA) {
           shift()
           tokenGen(reset()) #:: EOF #:: LazyList.empty
         }
-        case TransitionResult.Rejected => throw new MismatchedCharException
+        case TransitionResult.Rejected => {
+          val context = reset()
+          throw new MismatchedCharException(context.matchedString, context.start, context.end)
+        }
         case TransitionResult.OnGoing(_) => throw new UnsupportedOperationException
       }
     }
@@ -147,7 +153,7 @@ object Lexer {
     }
 
     def ignore(regexes: Regex*): LexerBuilder = {
-      rules += Tuple2(EnumeratedAlternation(regexes.toSeq), skipGenerator)
+      rules += Tuple2(EnumeratedAlternation(regexes), skipGenerator)
       this
     }
   }
