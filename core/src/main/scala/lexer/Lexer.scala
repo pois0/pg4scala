@@ -39,7 +39,7 @@ final class Lexer private[Lexer](private val dfa: DFA) {
           case TransitionResult.Accepted(tokenGen) => return tokenGen(reset()) #:: loop(DFA.State.initialState, c)
           case TransitionResult.Rejected => {
             val context = reset()
-            throw new MismatchedCharException(context.matchedString, context.start, context.end)
+            throw MismatchedCharException(context.matchedString, c, context.start, context.end)
           }
         }
       }
@@ -51,7 +51,7 @@ final class Lexer private[Lexer](private val dfa: DFA) {
         }
         case TransitionResult.Rejected => {
           val context = reset()
-          throw new MismatchedCharException(context.matchedString, context.start, context.end)
+          throw MismatchedCharException(context.matchedString, c, context.start, context.end)
         }
         case TransitionResult.OnGoing(_) => throw new UnsupportedOperationException
       }

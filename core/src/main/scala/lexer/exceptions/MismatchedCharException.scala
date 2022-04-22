@@ -3,4 +3,9 @@ package lexer.exceptions
 
 import lexer.MatchedContext.CharPosition
 
-case class MismatchedCharException(mismatchedString: String, start: CharPosition, end: CharPosition) extends LexingException
+case class MismatchedCharException(
+  bufferedString: String,
+  currentChar: Int,
+  start: CharPosition,
+  end: CharPosition
+)extends LexingException

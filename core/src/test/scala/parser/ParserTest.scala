@@ -1,9 +1,9 @@
 package jp.pois.pg4scala
 package parser
 
-import parser.Character.charSeq
+import parser.Character.{Terminal, charSeq}
 import parser.Parser.RGParam
-import parser.ParserTest.Tokens._
+import parser.ParserTest.Tokens.{Str, _}
 import parser.ParserTest.Value.{Equals, Unary}
 import parser.ParserTest._
 
@@ -50,6 +50,16 @@ class ParserTest extends AnyFunSuite {
     testParse(rule, Tokens.Star #:: Tokens.Id #:: common.Token.EOF #:: LazyList.empty, Unary(Value.Id))
     testParse(rule, Tokens.Id #:: Equal #:: Tokens.Id #:: common.Token.EOF #:: LazyList.empty, Equals(Value.Id, Value.Id))
     testParse(rule, Tokens.Star #:: Tokens.Star #:: Tokens.Star #:: Tokens.Id #:: common.Token.EOF #:: LazyList.empty, Unary(Unary(Unary(Value.Id))))
+  }
+
+  test("Class Test") {
+    val StrToken = Terminal(classOf[Tokens.Str])
+
+    val rule = Parser.builder[Value](S)
+      .rule(S, Seq(Star, StrToken), { seq => Value.Str(seq(1).asTokenOf[Str].value) })
+      .build
+
+    testParse(rule, Tokens.Star #:: Tokens.Str("yof") #:: common.Token.EOF #:: LazyList.empty, Value.Str("yof"))
   }
 
   test("opt Test") {
@@ -121,6 +131,8 @@ object ParserTest {
     case object Comma extends common.Token
     case object Equal extends common.Token
     case object Star extends common.Token
+
+    case class Str(value: String) extends common.Token
   }
 
   sealed abstract class Value
@@ -134,5 +146,7 @@ object ParserTest {
 
     case class Equals(left: Value, right: Value) extends Value
     case class Unary(rand: Value) extends Value
+
+    case class Str(value: String) extends Value
   }
 }
