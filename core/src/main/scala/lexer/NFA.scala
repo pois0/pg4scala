@@ -324,7 +324,7 @@ private[lexer] object NFA {
       visited.set(index)
 
       transit.get(epsilon).map { epsilonSeq =>
-        val tmp = mutable.Map() ++ transit
+        val tmp = mutable.Map.from(transit)
         var tmpTransition: Option[TokenGenerator] = None
         var tmpRank = Int.MaxValue
         tmp.remove(epsilon)

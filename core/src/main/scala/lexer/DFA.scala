@@ -4,16 +4,16 @@ package lexer
 import lexer.DFA.TransitionResult.{Accepted, OnGoing, Rejected}
 import lexer.DFA.{State, TransitionResult}
 import lexer.Lexer.TokenGenerator
+import lexer.util.RawIntArrayBuffer
 import utils.Math.minBy
-import utils.RawArrayBuffer
 
 import scala.collection.immutable.{TreeMap, TreeSet}
 import scala.collection.mutable
 import scala.language.implicitConversions
 
-private[lexer] final case class DFA private(private val table: Array[Array[Int]], private val resultMap: Map[Int, TokenGenerator]) {
+private[lexer] final case class DFA private(private val table: Array[Int], private val resultMap: Map[Int, TokenGenerator]) {
   def transit(currentState: State, input: Int): TransitionResult = {
-    val next = table(currentState)(input)
+    val next = table(currentState * 0x100 + input)
     if (next == State.jamState) {
       currentResult(currentState)
     } else {
@@ -29,7 +29,7 @@ object DFA {
     val initialState = TreeSet(nfa.initialState)
     val queue = mutable.Queue((initialState, 1))
 
-    val transitTable = new RawArrayBuffer[Array[Int]](nfa.table.size)
+    val transitTable = new RawIntArrayBuffer(nfa.table.size * 0x100)
     val stateMap = mutable.Map(initialState -> 1)
     var newStateId = 2
     val resultMap = mutable.TreeMap.empty[Int, TokenGenerator]
@@ -39,29 +39,25 @@ object DFA {
         .reduceOption(minBy(nfa.resultOrder))
         .foreach { resultMap(dfaState) = _ }
 
-      transitTable(dfaState) = {
-        val map = mutable.Map.empty[Int, TreeSet[Int]]
+      val map = mutable.Map.empty[Int, TreeSet[Int]]
 
-        for (state <- nfaState; (c, seq) <- nfa.table(state)) {
-          map(c) = map.getOrElse(c, TreeSet.empty[Int]) ++ seq
-        }
+      for (state <- nfaState; (c, seq) <- nfa.table(state)) {
+        map(c) = map.getOrElse(c, TreeSet.empty[Int]) ++ seq
+      }
 
-        val arr = new Array[Int](0x100)
-        for ((c, stateSet) <- map) {
-          arr(c) = State(
-            stateMap.getOrElseUpdate(stateSet, {
-              val tmp = newStateId
-              newStateId += 1
-              queue += Tuple2(stateSet, tmp)
-              tmp
-            })
-          )
-        }
-        arr
+      for ((c, stateSet) <- map) {
+        transitTable(dfaState * 0x100 + c) = State(
+          stateMap.getOrElseUpdate(stateSet, {
+            val tmp = newStateId
+            newStateId += 1
+            queue += Tuple2(stateSet, tmp)
+            tmp
+          })
+        )
       }
     }
 
-    val dfa = new DFA(transitTable.toArray, resultMap.to(TreeMap))
+    val dfa = new DFA(transitTable.toArray(newStateId * 0x100), resultMap.to(TreeMap))
     dfa
   }
 
