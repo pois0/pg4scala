@@ -86,8 +86,6 @@ private[lexer] object NFA {
         val fs = Seq(finishState)
         val f1s = Seq(stateOffset + 1)
         val f2s = Seq(stateOffset + 2)
-        val f3s = Seq(stateOffset + 3)
-
 
         val rootDomainBuf = new ArrayBuffer[Int]()
         val rootRangeBuf = new ArrayBuffer[Seq[Int]]()
@@ -328,7 +326,7 @@ private[lexer] object NFA {
       transit.get(epsilon).map { epsilonSeq =>
         val tmp = mutable.Map() ++ transit
         var tmpTransition: Option[TokenGenerator] = None
-        var tmpRank =  Int.MaxValue
+        var tmpRank = Int.MaxValue
         tmp.remove(epsilon)
         for (s <- epsilonSeq) {
           for ((c, seq) <- loop(s) if c != epsilon) {
