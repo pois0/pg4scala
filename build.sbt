@@ -13,12 +13,8 @@ val CommonSettings = Seq(
   developers := List(
     Developer(id="pois0", name="Shusuke Takahashi", email="dev@pois.jp", url=url("https://github.com/pois0"))
   ),
-  scalaVersion := "2.13.8",
+  scalaVersion := "2.13.10",
   idePackagePrefix := Some("jp.pois.pg4scala"),
-
-  githubOwner := "pois0",
-  githubRepository := "pg4scala",
-  githubTokenSource := TokenSource.Environment("GITHUB_TOKEN") || TokenSource.GitConfig("github.token"),
 )
 
 lazy val Root = project.in(file("."))
@@ -26,7 +22,6 @@ lazy val Root = project.in(file("."))
   .aggregate(Core, Benchmark)
 
 lazy val Core = project.in(file("core"))
-  .enablePlugins(GitHubPackagesPlugin)
   .settings(CommonSettings)
   .settings(
     name := "pg4scala-core",
