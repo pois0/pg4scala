@@ -15,20 +15,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+    - name: Import GPG key
+      id: import_gpg
+      uses: crazy-max/ghaction-import-gpg@v5
+      with:
+        gpg_private_key: ${{ secrets.GPG_PRIVATE }}
+        passphrase: ${{ secrets.GPG_PASS }}
+        fingerprint: "523C25EDC9F5FAA76A29556261A9DF65B817C971"
     - name: Get the version
-      run: echo "VERSION=${GITHUB_REF/refs\/tags\/v/}" >> $GITHUB_ENV
+      run: echo "PG4SCALA_VERSION=${GITHUB_REF/refs\/tags\/v/}" >> $GITHUB_ENV
     - name: Set up JDK 11
       uses: actions/setup-java@v2
       with:
         java-version: '11'
         distribution: 'adopt'
+    - name: Echo sbt config
+      env:
+        OSSRH_USER: ${{ secrets.OSSRH_USER }}
+        OSSRH_PASS: ${{ secrets.OSSRH_PASS }}
+      run: |
+        mkdir -p $HOME/.sbt/1.0
+        echo "credentials += Credentials(\"Sonatype Nexus Repository Manager\", \"s01.oss.sonatype.org\", \"${OSSRH_USER}\", \"${OSSRH_PASS}\")" > $HOME/.sbt/1.0/sonatype.sbt
     - name: Run tests
       run: sbt test
     - name: Package
       env:
         PG4SCALA_VERSION: ${{ env.VERSION }}
       run: sbt package
-    - name: Publish
+    - name: Publish to GitHub
       uses: softprops/action-gh-release@v1
       with:
-        files: core/target/scala-2.13/pg4scala-core_2.13-${{ env.VERSION }}.jar
+        files: core/target/scala-2.13/pg4scala-core_2.13-${{ env.PG4SCALA_VERSION }}.jar
+    - name: Publish to OSSRH
+      run: sbt "Core/publishSigned; sonatypeBundleRelease"
